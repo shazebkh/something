@@ -18,10 +18,10 @@ Useful commands: npm test, npm run typecheck, npm run build:client, and npm run 
 The first screen introduces the controls and the room challenge. Choose a game mode and question subject from the lobby:
 
 - **Single player** starts a solo escape.
-- **Multiplayer** supports 2–8 players. The host chooses the player count and subject; share the match code with players joining the same game.
+- **Multiplayer** supports 2–8 players. A room code is generated in the lobby. The host chooses the player count and subject, then selects **Create multiplayer room** and shares the code. Other players enter that code and select **Join with code**. The host's player count and subject apply to everyone; all players share the same starting room and house.
 - Subjects include biology, physics, history, geography, psychology, physiology, chemistry, astronomy, literature, economics, and All subjects.
 
-Move with WASD or the arrow keys, use the touch joystick, or tap/click a floor location to walk. Get close to a door, window, cupboard, or drawer to receive its question. The translucent question card appears beside your avatar in the 3D room and follows it as the camera moves. Correct answers open the next step and change the room’s colors and decorations. Wrong answers shrink the room and add a strike.
+Move with WASD or the arrow keys, use the touch joystick, or tap/click a floor location to walk. Get close to a door, window, cupboard, or drawer to receive its question. The question card opens in the upper-right of the 3D room when you approach an exit and closes when you move away. Correct answers open the next step and change the room’s colors and decorations. Wrong answers shrink the room and add a strike.
 
 The bundled bank contains 110 questions. Questions are graded deterministically and are not repeated for the same player during a match. Multiplayer includes room-presence avatars, match-wide text chat, and same-room push-to-talk voice. Voice requires microphone permission and HTTPS (or localhost).
 
