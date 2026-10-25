@@ -1,8 +1,8 @@
 import * as THREE from "three";
 const required = (selector) => { const element = document.querySelector(selector); if (!element)
     throw new Error(`Missing UI element ${selector}`); return element; };
-const statusEl = required("#status"), gameStatus = required("#game-status"), lobby = required("#lobby"), game = required("#game");
-const introScreen = required("#intro-screen"), introStart = required("#intro-start"), loadingScreen = required("#loading-screen"), loadingMessage = required("#loading-message");
+const statusEl = required("#status"), gameStatus = required("#game-status"), lobby = required("#lobby"), game = required("#game"), leaveMatchButton = required("#leave-match");
+const introScreen = required("#intro-screen"), introStart = required("#intro-start"), loadingScreen = required("#loading-screen"), loadingMessage = required("#loading-message"), countdownScreen = required("#start-countdown"), countdownNumber = required("#countdown-number");
 const modeEl = required("#mode"), playerCountLabel = required("#player-count-label"), playerCountEl = required("#player-count"), subjectEl = required("#subject"), nameEl = required("#name"), matchEl = required("#match"), joinButton = required("#join"), createMatchButton = required("#create-match"), codeControls = required("#code-controls"), waitingRoom = required("#waiting-room"), waitingMessage = required("#waiting-message"), waitingCode = required("#waiting-code"), copyWaitingCodeButton = required("#copy-waiting-code"), startGameButton = required("#start-game");
 const phaseEl = required("#phase"), roomStats = required("#room-stats"), nearby = required("#nearby");
 const questionEl = required("#question"), answerInput = required("#answer-input"), feedback = required("#feedback"), hintText = required("#hint-text"), questionCard = required("#question-card");
@@ -41,7 +41,7 @@ moveMarker.rotation.x = -Math.PI / 2;
 moveMarker.position.y = .02;
 moveMarker.visible = false;
 scene.add(moveMarker);
-let ws = null, latest = null, playerId = null, matchId = null, requestedExitId = null, visualRevision = 0, pendingVisualRefresh = false;
+let ws = null, latest = null, playerId = null, matchId = null, requestedExitId = null, visualRevision = 0, pendingVisualRefresh = false, countdownActive = false;
 let joystick = { x: 0, z: 0 }, joystickPointer = null, targetFixture = null;
 const voicePeers = new Map(), voiceAudio = new Map(), pendingIce = new Map();
 let voiceStream = null;
@@ -284,7 +284,8 @@ function syncRemotePlayers(players) { const present = new Set(players.map(p => p
 } for (const peer of players) {
     let avatar = remoteAvatars.get(peer.id);
     if (!avatar) {
-        const root = createRemoteAvatar(peer.name);
+        const displayName = `${peer.playerNumber ? `${peer.playerNumber}. ` : ""}${peer.name}${peer.isHost ? " (Host)" : ""}`;
+        const root = createRemoteAvatar(displayName);
         scene.add(root);
         avatar = { root, target: new THREE.Vector3(peer.x, 0, peer.z), voiceReady: peer.voiceReady };
         remoteAvatars.set(peer.id, avatar);
@@ -292,7 +293,7 @@ function syncRemotePlayers(players) { const present = new Set(players.map(p => p
     avatar.target.set(peer.x, 0, peer.z);
     avatar.voiceReady = peer.voiceReady;
 } syncVoicePeers(); }
-function appendChat(name, text, mine = false) { const row = document.createElement("p"), who = document.createElement("strong"); row.className = mine ? "chat-line mine" : "chat-line"; who.textContent = name + (mine ? " (you): " : ": "); row.append(who, document.createTextNode(text)); chatMessages.append(row); while (chatMessages.childElementCount > 100)
+function appendChat(name, text, mine = false, number, isHost = false) { const row = document.createElement("p"), who = document.createElement("strong"); row.className = mine ? "chat-line mine" : "chat-line"; who.textContent = `${number ? `${number}. ` : ""}${name}${isHost ? " (Host)" : ""}${mine ? " (you)" : ""}: `; row.append(who, document.createTextNode(text)); chatMessages.append(row); while (chatMessages.childElementCount > 100)
     chatMessages.firstElementChild?.remove(); chatMessages.scrollTop = chatMessages.scrollHeight; }
 chatForm.addEventListener("submit", event => { event.preventDefault(); const text = chatInput.value.trim(); if (!text)
     return; send("chat", { text }); chatInput.value = ""; });
@@ -386,7 +387,9 @@ function connectToMatch(action) { if (ws?.readyState === WebSocket.OPEN)
     statusEl.textContent = "Disconnected. Try joining again."; }; connection.onerror = () => { loadingScreen.hidden = true; statusEl.textContent = "Could not connect."; }; connection.onmessage = event => handle(JSON.parse(String(event.data))); }
 createMatchButton.addEventListener("click", () => connectToMatch("create_match"));
 joinButton.addEventListener("click", () => connectToMatch(modeEl.value === "single" ? "create_match" : "join_match"));
-function showResults(won, points) { loadingScreen.hidden = true; questionCard.hidden = true; stopVoice(); resultIcon.textContent = won ? "🏆" : "💔"; resultTitle.textContent = won ? "Congratulations, you won!" : "You lose. Better luck next time."; resultPoints.textContent = `Your points: ${Math.round(points)}`; resultsScreen.hidden = false; game.hidden = true; lobby.hidden = true; }
+function leaveCurrentRoom() { const connection = ws; ws = null; connection?.close(1000, "left room"); stopVoice(false); latest = null; playerId = null; matchId = null; requestedExitId = null; targetFixture = null; countdownActive = false; countdownScreen.hidden = true; waitingRoom.hidden = true; questionCard.hidden = true; resultsScreen.hidden = true; game.hidden = true; lobby.hidden = false; subjectEl.disabled = false; matchEl.value = ""; statusEl.textContent = "You left the room."; }
+leaveMatchButton.addEventListener("click", leaveCurrentRoom);
+function showResults(won, points) { countdownActive = false; countdownScreen.hidden = true; loadingScreen.hidden = true; questionCard.hidden = true; stopVoice(); resultIcon.textContent = won ? "🏆" : "💔"; resultTitle.textContent = won ? "Congratulations, you won!" : "You lose. Better luck next time."; resultPoints.textContent = `Your points: ${Math.round(points)}`; resultsScreen.hidden = false; game.hidden = true; lobby.hidden = true; }
 required("#play-again").addEventListener("click", () => { resultsScreen.hidden = true; game.hidden = false; lobby.hidden = true; matchEl.value = modeEl.value === "single" ? "" : generateRoomCode(); subjectEl.disabled = false; latest = null; playerId = null; matchId = null; requestedExitId = null; ws?.close(1000, "play again"); ws = null; connectToMatch("create_match"); });
 required("#exit-game").addEventListener("click", () => { resultsScreen.hidden = true; game.hidden = true; lobby.hidden = false; subjectEl.disabled = false; latest = null; playerId = null; matchId = null; requestedExitId = null; ws?.close(1000, "exit match"); ws = null; statusEl.textContent = "You left the match. Join when you are ready."; });
 let roomClearToastTimer = 0;
@@ -401,8 +404,29 @@ function handle(event) {
         waitingRoom.hidden = event.mode === "single";
         subjectEl.value = String(event.subject ?? "all");
         subjectEl.disabled = true;
-        gameStatus.textContent = `Match ${matchId} · ${event.players}/${event.requiredPlayers} players · ${event.isHost ? "Host" : "Player"} · ${subjectEl.options[subjectEl.selectedIndex]?.text ?? "All subjects"}`;
+        gameStatus.textContent = `Match ${matchId} · ${event.playerNumber}. ${nameEl.value}${event.isHost ? " (Host)" : ""} · ${event.players}/${event.requiredPlayers} players · ${subjectEl.options[subjectEl.selectedIndex]?.text ?? "All subjects"}`;
         resize();
+        return;
+    }
+    if (event.type === "start_countdown") {
+        countdownActive = true;
+        countdownScreen.hidden = false;
+        countdownNumber.textContent = Number(event.seconds) <= 0 ? "GO!" : String(event.seconds);
+        startGameButton.textContent = "Stop countdown";
+        return;
+    }
+    if (event.type === "countdown_cancelled") {
+        countdownActive = false;
+        countdownScreen.hidden = true;
+        startGameButton.textContent = "Start game";
+        return;
+    }
+    if (event.type === "phase_change") {
+        countdownActive = false;
+        countdownScreen.hidden = true;
+        phaseEl.textContent = String(event.phase);
+        if (latest)
+            latest = { ...latest, phase: String(event.phase) };
         return;
     }
     if (event.type === "error") {
@@ -417,7 +441,7 @@ function handle(event) {
         return;
     }
     if (event.type === "chat_message") {
-        appendChat(String(event.senderName ?? "Player"), String(event.text ?? ""), String(event.senderId ?? "") === playerId);
+        appendChat(String(event.senderName ?? "Player"), String(event.text ?? ""), String(event.senderId ?? "") === playerId, Number(event.senderNumber) || undefined, event.senderIsHost === true);
         return;
     }
     if (event.type === "players_update") {
@@ -446,7 +470,12 @@ function handle(event) {
         if (data.phase === "LOBBY") {
             waitingCode.textContent = data.match.id;
             waitingMessage.textContent = `${data.match.playerCount} of ${data.match.requiredPlayers} players connected. Chat and voice are open while you wait.`;
+            countdownActive = data.match.startCountdownActive;
             startGameButton.hidden = !data.match.isHost;
+            startGameButton.textContent = countdownActive ? "Stop countdown" : "Start game";
+            countdownScreen.hidden = !countdownActive;
+            if (countdownActive)
+                countdownNumber.textContent = String(data.match.startCountdownSeconds);
         }
         if (builtRoomId !== data.player.roomId || pendingVisualRefresh) {
             visualRevision++;
@@ -465,7 +494,7 @@ function handle(event) {
         leaderboard.replaceChildren();
         for (const row of players) {
             const li = document.createElement("li");
-            li.textContent = `${row.rank}. ${row.name} — ${row.distanceToFinish} rooms · ${row.strikes} strikes · ${Math.round(row.score)} pts${row.crushed ? " · crushed" : ""}${row.exitedAt !== null ? " · escaped" : ""}`;
+            li.textContent = `${row.rank}. ${row.playerNumber ?? ""}${row.playerNumber ? ". " : ""}${row.name}${row.isHost ? " (Host)" : ""} — ${row.distanceToFinish} rooms · ${row.strikes} strikes · ${Math.round(row.score)} pts${row.crushed ? " · crushed" : ""}${row.exitedAt !== null ? " · escaped" : ""}`;
             leaderboard.append(li);
         }
         if (event.type === "match_end") {
