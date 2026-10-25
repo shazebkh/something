@@ -17,9 +17,9 @@
 .loading-spinner{width:34px;height:34px;border:3px solid #ffffff35;border-top-color:#f4b860;border-radius:50%;animation:loading-spin .8s linear infinite}
 @keyframes loading-spin{to{transform:rotate(360deg)}}
 /* Interactive question follows the player within the 3D scene */
-.question-float{position:absolute;z-index:4;left:8px;top:8px;transform:none;width:min(300px,calc(100% - 16px));max-height:min(52%,380px);overflow:auto;margin:0;padding:12px 14px 10px;border:1px solid #f0d79bcc;border-radius:13px;background:linear-gradient(145deg,#172126e8,#202b30df);box-shadow:0 12px 34px #0009;backdrop-filter:blur(9px);color:#f1eee8;pointer-events:auto;touch-action:pan-y}
+.question-float{position:absolute;z-index:4;left:auto;right:12px;top:12px;transform:none;width:min(300px,calc(100% - 24px));max-height:min(68%,520px);overflow:auto;margin:0;padding:12px 14px 10px;border:1px solid #f0d79bcc;border-radius:13px;background:linear-gradient(145deg,#172126ed,#202b30e8);box-shadow:0 12px 34px #0009;backdrop-filter:blur(9px);color:#f1eee8;pointer-events:auto;touch-action:pan-y}
 .question-float[hidden]{display:none}
-.question-float:after{content:"";position:absolute;left:50%;bottom:-9px;width:16px;height:16px;transform:translateX(-50%) rotate(45deg);border-right:1px solid #d8c493aa;border-bottom:1px solid #d8c493aa;background:#202b30d9}
+.question-float:after{content:none}
 .question-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .question-float h2{font-size:.92rem;margin:0;color:#f4b860}
 .question-orbit{color:#f4b860;font-size:1.15rem}
@@ -33,14 +33,14 @@
 .question-float .choice{min-height:34px;padding:3px 0;line-height:1.3;font-size:.9rem}
 .question-float .choice input{min-height:auto}
 @media(max-width:850px){
- .question-float{width:min(280px,calc(100% - 16px));max-height:min(52%,340px);padding:10px 12px 9px}
+ .question-float{width:min(280px,calc(100% - 16px));max-height:min(62%,420px);padding:10px 12px 9px}
  .question-float #question{font-size:.9rem}
  .question-float .choice{font-size:.82rem;min-height:30px}
  .question-float .actions button{font-size:.76rem;padding:7px 8px}
  .intro-card{padding:24px 20px}
 }
 @media(max-width:480px){
- .question-float{max-height:min(48%,310px);width:min(250px,calc(100% - 12px))}
+ .question-float{max-height:min(58%,380px);width:min(250px,calc(100% - 12px))}
  .question-float #question{font-size:.84rem}
  .question-float .actions{gap:4px}
  .question-float .actions button{font-size:.7rem;padding:7px 6px}
