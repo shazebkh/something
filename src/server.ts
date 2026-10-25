@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage } from "node:http";
 import { createReadStream, existsSync, readFileSync } from "node:fs";
-import { resolve, extname, sep } from "node:path";
+import { resolve, extname, sep, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createHash, randomUUID } from "node:crypto";
 import type { Socket } from "node:net";
 import { chooseTeleportDestination, generateHouse, type House } from "./house.ts";
@@ -15,7 +16,7 @@ type Exit = {id:string;type:"door"|"window"|"cupboard"|"drawer";targetRoomId:str
 type Player = {id:string;name:string;socket:Socket;roomId:string;position:{x:number;z:number};lastMoveAt:number;lastChatAt:number;voiceReady:boolean;state:PlayerRulesState;seen:Set<string>;exits:Exit[];question:Question|null;questionStartedAt:number;calibrationIndex:number;farStreak:number;hintUsed:Set<number>};
 type Match = {id:string;mode:MatchMode;targetPlayers:number;subject:QuestionSubject;hostPlayerId:string;phase:Phase;seed:number;house:House;players:Map<string,Player>;startedAt:number|null;endedAt:number|null;calibrationTimer:ReturnType<typeof setTimeout>|null};
 type ClientEvent = {type:string;mode?:string;playerCount?:number;subject?:string;playerId?:string;name?:string;matchId?:string;exitId?:string;answer?:string;hintLevel?:number;text?:string;x?:number;z?:number;ready?:boolean;targetId?:string;signal?:unknown};
-const ROOT=resolve(import.meta.dirname,"..");
+const ROOT=resolve(dirname(fileURLToPath(import.meta.url)),"..");
 let questions=JSON.parse(readFileSync(resolve(ROOT,"data/questions.json"),"utf8")) as Question[];
 if(questions.length<100)throw new Error("Question bank must contain at least 100 entries");
 const PORT=Number(process.env.PORT??3000), MAX_PLAYERS=8;
