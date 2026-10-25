@@ -18,7 +18,7 @@ Useful commands: npm test, npm run typecheck, npm run build:client, and npm run 
 The first screen introduces the controls and the room challenge. Choose a game mode and question subject from the lobby:
 
 - **Single player** starts a solo escape.
-- **Multiplayer** supports 2–8 players. A room code is generated in the lobby. The host chooses the player count and subject, then selects **Create multiplayer room** and shares the code. Other players enter that code and select **Join with code**. The host's player count and subject apply to everyone; all players share the same starting room and house.
+- **Multiplayer** supports 2–8 players. The host chooses the player limit and subject, then clicks **Create room** to generate a code. Share it with players; they paste it in **Join with room code** and select **Join room**. The host can start early with fewer players than the selected limit. Text and voice chat are available while the room is waiting. Everyone shares the same starting room and house.
 - Subjects include biology, physics, history, geography, psychology, physiology, chemistry, astronomy, literature, economics, and All subjects.
 
 Move with WASD or the arrow keys, use the touch joystick, or tap/click a floor location to walk. Get close to a door, window, cupboard, or drawer to receive its question. The question card opens in the upper-right of the 3D room when you approach an exit and closes when you move away. Correct answers open the next step and change the room’s colors and decorations. Wrong answers shrink the room and add a strike.
