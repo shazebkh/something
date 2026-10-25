@@ -12,14 +12,12 @@ services:
         value: production
       - key: DATABASE_URL
         fromDatabase:
-          name: escape-house-db
+          name: escape-house-postgres
           property: connectionString
-      - key: OPENAI_API_KEY
-        sync: false
 
 databases:
-  - name: escape-house-db
+  - name: escape-house-postgres
     plan: free
     region: singapore
-    databaseName: escape_house
-    user: escape_house
+    databaseName: escape_house_postgres
+    user: escape_house_postgres_user
