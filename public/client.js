@@ -2,9 +2,10 @@ import * as THREE from "three";
 const required = (selector) => { const element = document.querySelector(selector); if (!element)
     throw new Error(`Missing UI element ${selector}`); return element; };
 const statusEl = required("#status"), gameStatus = required("#game-status"), lobby = required("#lobby"), game = required("#game");
+const introScreen = required("#intro-screen"), introStart = required("#intro-start"), loadingScreen = required("#loading-screen"), loadingMessage = required("#loading-message");
 const modeEl = required("#mode"), playerCountLabel = required("#player-count-label"), playerCountEl = required("#player-count"), subjectEl = required("#subject"), nameEl = required("#name"), matchEl = required("#match"), joinButton = required("#join");
 const phaseEl = required("#phase"), roomStats = required("#room-stats"), nearby = required("#nearby");
-const questionEl = required("#question"), answerInput = required("#answer-input"), feedback = required("#feedback"), hintText = required("#hint-text");
+const questionEl = required("#question"), answerInput = required("#answer-input"), feedback = required("#feedback"), hintText = required("#hint-text"), questionCard = required("#question-card");
 const questionSource = required("#question-source"), roomClearToast = required("#room-clear-toast"), leaderboard = required("#leaderboard"), resultsScreen = required("#results-screen"), resultIcon = required("#result-icon"), resultTitle = required("#result-title"), resultPoints = required("#result-points"), worldCanvas = required("#world"), stickPad = required("#joystick"), stick = required("#stick"), socialPanel = required("#social-panel"), chatMessages = required("#chat-messages"), chatForm = required("#chat-form"), chatInput = required("#chat-input"), voiceEnable = required("#voice-enable"), talkButton = required("#push-to-talk"), voiceStatus = required("#voice-status");
 const scene = new THREE.Scene();
 scene.background = new THREE.Color("#172026");
@@ -181,6 +182,11 @@ function buildRoom(roomId, revision, exits) {
 }
 function resize() { const width = worldCanvas.clientWidth, height = worldCanvas.clientHeight; if (width < 1 || height < 1)
     return; renderer.setSize(width, height, false); camera.aspect = width / height; camera.updateProjectionMatrix(); }
+function positionQuestionCard() { if (questionCard.hidden || !latest)
+    return; player.updateMatrixWorld(true); camera.updateMatrixWorld(true); const anchor = new THREE.Vector3(0, 2.12, 0).applyMatrix4(player.matrixWorld).project(camera); if (anchor.z < -1 || anchor.z > 1)
+    return; const wrap = worldCanvas.parentElement; if (!wrap)
+    return; const rect = wrap.getBoundingClientRect(), card = questionCard.getBoundingClientRect(), anchorX = (anchor.x * .5 + .5) * rect.width, anchorY = (-anchor.y * .5 + .5) * rect.height, half = card.width / 2, left = THREE.MathUtils.clamp(anchorX + (anchor.x < 0 ? half + 22 : -half - 22), half + 8, rect.width - half - 8); let top = anchorY - card.height - 24; if (top < 8)
+    top = Math.min(rect.height - card.height - 8, anchorY + 48); top = THREE.MathUtils.clamp(top, 8, Math.max(8, rect.height - card.height - 8)); questionCard.style.left = String(left) + "px"; questionCard.style.top = String(top) + "px"; }
 new ResizeObserver(resize).observe(worldCanvas);
 window.addEventListener("resize", resize);
 resize();
@@ -259,7 +265,7 @@ function animate() { requestAnimationFrame(animate); const dt = Math.min(clock.g
     prop.rotation.y += dt * .12; for (const avatar of remoteAvatars.values()) {
     avatar.root.position.lerp(avatar.target, Math.min(1, dt * 12));
     avatar.root.rotation.y += (avatar.target.x - avatar.root.position.x) * .03;
-} camera.position.x += (player.position.x - camera.position.x) * Math.min(1, dt * 2); camera.position.z += (player.position.z + 8 - camera.position.z) * Math.min(1, dt * 2); camera.lookAt(player.position.x, 1, player.position.z); renderer.render(scene, camera); }
+} camera.position.x += (player.position.x - camera.position.x) * Math.min(1, dt * 2); camera.position.z += (player.position.z + 8 - camera.position.z) * Math.min(1, dt * 2); camera.lookAt(player.position.x, 1, player.position.z); positionQuestionCard(); renderer.render(scene, camera); }
 const clock = new THREE.Clock();
 animate();
 function createRemoteAvatar(name) { const root = new THREE.Group(), hue = (hash(name) % 360) / 360, shirt = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(hue, .62, .52), roughness: .7 }), pants = new THREE.MeshStandardMaterial({ color: 0x253b68, roughness: .8 }), skin = new THREE.MeshStandardMaterial({ color: 0xf0bc91, roughness: .7 }); const torso = new THREE.Mesh(new THREE.CylinderGeometry(.25, .32, .68, 10), shirt); torso.position.y = 1.08; root.add(torso); const head = new THREE.Mesh(new THREE.SphereGeometry(.22, 12, 10), skin); head.position.y = 1.62; root.add(head); const legs = []; for (const side of [-1, 1]) {
@@ -361,14 +367,16 @@ talkButton.addEventListener("pointercancel", () => setTalking(false));
 window.addEventListener("blur", () => setTalking(false));
 modeEl.addEventListener("change", () => { playerCountLabel.hidden = modeEl.value === "single"; });
 playerCountLabel.hidden = modeEl.value === "single";
+introStart.addEventListener("click", () => { introScreen.hidden = true; lobby.scrollIntoView({ behavior: "smooth", block: "center" }); joinButton.focus(); });
 joinButton.addEventListener("click", () => { if (ws?.readyState === WebSocket.OPEN)
-    return; statusEl.textContent = "Connecting…"; const proto = location.protocol === "https:" ? "wss" : "ws"; ws = new WebSocket(`${proto}://${location.host}`); ws.onopen = () => send("join_match", { mode: modeEl.value, playerCount: Number(playerCountEl.value), subject: subjectEl.value, name: nameEl.value, matchId: matchEl.value || undefined }); ws.onclose = () => { stopVoice(false); statusEl.textContent = "Disconnected. Refresh to reconnect."; }; ws.onerror = () => statusEl.textContent = "Could not connect."; ws.onmessage = event => handle(JSON.parse(String(event.data))); });
-function showResults(won, points) { stopVoice(); resultIcon.textContent = won ? "🏆" : "💔"; resultTitle.textContent = won ? "Congratulations, you won!" : "You lose. Better luck next time."; resultPoints.textContent = `Your points: ${Math.round(points)}`; resultsScreen.hidden = false; game.hidden = true; lobby.hidden = true; }
+    return; loadingMessage.textContent = "Connecting to your escape room…"; loadingScreen.hidden = false; statusEl.textContent = "Connecting…"; const proto = location.protocol === "https:" ? "wss" : "ws"; ws = new WebSocket(`${proto}://${location.host}`); ws.onopen = () => { loadingMessage.textContent = "Building your room and joining players…"; send("join_match", { mode: modeEl.value, playerCount: Number(playerCountEl.value), subject: subjectEl.value, name: nameEl.value, matchId: matchEl.value || undefined }); }; ws.onclose = () => { loadingScreen.hidden = true; stopVoice(false); statusEl.textContent = "Disconnected. Refresh to reconnect."; }; ws.onerror = () => { loadingScreen.hidden = true; statusEl.textContent = "Could not connect."; }; ws.onmessage = event => handle(JSON.parse(String(event.data))); });
+function showResults(won, points) { loadingScreen.hidden = true; questionCard.hidden = true; stopVoice(); resultIcon.textContent = won ? "🏆" : "💔"; resultTitle.textContent = won ? "Congratulations, you won!" : "You lose. Better luck next time."; resultPoints.textContent = `Your points: ${Math.round(points)}`; resultsScreen.hidden = false; game.hidden = true; lobby.hidden = true; }
 required("#play-again").addEventListener("click", () => { resultsScreen.hidden = true; game.hidden = false; lobby.hidden = true; matchEl.value = ""; subjectEl.disabled = false; latest = null; playerId = null; matchId = null; requestedExitId = null; ws?.close(1000, "play again"); ws = null; joinButton.click(); });
 required("#exit-game").addEventListener("click", () => { resultsScreen.hidden = true; game.hidden = true; lobby.hidden = false; subjectEl.disabled = false; latest = null; playerId = null; matchId = null; requestedExitId = null; ws?.close(1000, "exit match"); ws = null; statusEl.textContent = "You left the match. Join when you are ready."; });
 let roomClearToastTimer = 0;
 function handle(event) {
     if (event.type === "joined") {
+        loadingScreen.hidden = true;
         playerId = String(event.playerId);
         matchId = String(event.matchId);
         lobby.hidden = true;
@@ -381,6 +389,8 @@ function handle(event) {
         return;
     }
     if (event.type === "error") {
+        loadingScreen.hidden = true;
+        statusEl.textContent = String(event.message);
         feedback.textContent = String(event.message);
         return;
     }
@@ -460,7 +470,7 @@ function handle(event) {
         showResults(false, latest?.player.score ?? 0);
 }
 let builtRoomId = "";
-function renderQuestion(data) { questionEl.textContent = data.question?.text ?? (data.phase === "LOBBY" ? "Waiting for 6 players to start…" : data.phase === "CALIBRATION" ? "Answer the shared calibration question." : "Move near a room object to reveal its question."); questionSource.replaceChildren(); questionSource.hidden = true; if (data.question?.source_url) {
+function renderQuestion(data) { const active = !!data.question && !data.player.crushed && !data.player.exited; questionCard.hidden = !active; questionEl.textContent = data.question?.text ?? (data.phase === "LOBBY" ? "Waiting for 6 players to start…" : data.phase === "CALIBRATION" ? "Answer the shared calibration question." : "Move near a room object to reveal its question."); questionSource.replaceChildren(); questionSource.hidden = true; if (data.question?.source_url) {
     const link = document.createElement("a");
     link.href = data.question.source_url;
     link.target = "_blank";
@@ -487,7 +497,7 @@ else if (data.question) {
     input.autocomplete = "off";
     input.placeholder = "Your answer";
     answerInput.append(input);
-} const active = !!data.question && !data.player.crushed && !data.player.exited; required("#submit").disabled = !active; required("#hint1").disabled = !active || data.phase !== "LIVE"; required("#hint2").disabled = !active || data.phase !== "LIVE"; if (targetFixture)
+} required("#submit").disabled = !active; required("#hint1").disabled = !active || data.phase !== "LIVE"; required("#hint2").disabled = !active || data.phase !== "LIVE"; if (targetFixture)
     nearby.textContent = data.player.crushed ? "Your room collapsed." : data.lockedOut ? "Exit locked. Move to another object." : data.question ? "Question ready. Answer in the box." : "Near the exit object."; }
 required("#answer-form").addEventListener("submit", event => { event.preventDefault(); const value = answerInput.querySelector("input:checked")?.value ?? answerInput.querySelector('input[type="text"]')?.value; if (!value) {
     feedback.textContent = "Choose or enter an answer first.";
@@ -533,3 +543,4 @@ worldCanvas.addEventListener("pointerup", event => { if (!pointerDown || Math.hy
         moveMarker.visible = true;
     }
 } });
+
