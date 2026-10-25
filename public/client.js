@@ -185,8 +185,10 @@ function resize() { const width = worldCanvas.clientWidth, height = worldCanvas.
 function positionQuestionCard() { if (questionCard.hidden || !latest)
     return; player.updateMatrixWorld(true); camera.updateMatrixWorld(true); const anchor = new THREE.Vector3(0, 2.12, 0).applyMatrix4(player.matrixWorld).project(camera); if (anchor.z < -1 || anchor.z > 1)
     return; const wrap = worldCanvas.parentElement; if (!wrap)
-    return; const rect = wrap.getBoundingClientRect(), card = questionCard.getBoundingClientRect(), anchorX = (anchor.x * .5 + .5) * rect.width, anchorY = (-anchor.y * .5 + .5) * rect.height, half = card.width / 2, left = THREE.MathUtils.clamp(anchorX + (anchor.x < 0 ? half + 22 : -half - 22), half + 8, rect.width - half - 8); let top = anchorY - card.height - 24; if (top < 8)
-    top = Math.min(rect.height - card.height - 8, anchorY + 48); top = THREE.MathUtils.clamp(top, 8, Math.max(8, rect.height - card.height - 8)); questionCard.style.left = String(left) + "px"; questionCard.style.top = String(top) + "px"; }
+    return; const wrapRect = wrap.getBoundingClientRect(), canvasRect = worldCanvas.getBoundingClientRect(), card = questionCard.getBoundingClientRect(), anchorX = (anchor.x * .5 + .5) * canvasRect.width + canvasRect.left - wrapRect.left, anchorY = (-anchor.y * .5 + .5) * canvasRect.height + canvasRect.top - wrapRect.top; let left = anchorX + (anchor.x < 0 ? 22 : -card.width - 22); left = THREE.MathUtils.clamp(left, 8, Math.max(8, wrapRect.width - card.width - 8)); let top = anchorY - card.height - 28; if (top < 8)
+    top = anchorY + 42; top = THREE.MathUtils.clamp(top, 8, Math.max(8, wrapRect.height - card.height - 8)); const stableLeft = `${Math.round(left)}px`, stableTop = `${Math.round(top)}px`; if (questionCard.style.left !== stableLeft)
+    questionCard.style.left = stableLeft; if (questionCard.style.top !== stableTop)
+    questionCard.style.top = stableTop; }
 new ResizeObserver(resize).observe(worldCanvas);
 window.addEventListener("resize", resize);
 resize();
