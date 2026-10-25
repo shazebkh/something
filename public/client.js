@@ -3,7 +3,7 @@ const required = (selector) => { const element = document.querySelector(selector
     throw new Error(`Missing UI element ${selector}`); return element; };
 const statusEl = required("#status"), gameStatus = required("#game-status"), lobby = required("#lobby"), game = required("#game");
 const introScreen = required("#intro-screen"), introStart = required("#intro-start"), loadingScreen = required("#loading-screen"), loadingMessage = required("#loading-message");
-const modeEl = required("#mode"), playerCountLabel = required("#player-count-label"), playerCountEl = required("#player-count"), subjectEl = required("#subject"), nameEl = required("#name"), matchEl = required("#match"), joinButton = required("#join");
+const modeEl = required("#mode"), playerCountLabel = required("#player-count-label"), playerCountEl = required("#player-count"), subjectEl = required("#subject"), nameEl = required("#name"), matchEl = required("#match"), joinButton = required("#join"), createMatchButton = required("#create-match"), generateCodeButton = required("#generate-code"), copyCodeButton = required("#copy-code"), codeControls = required("#code-controls");
 const phaseEl = required("#phase"), roomStats = required("#room-stats"), nearby = required("#nearby");
 const questionEl = required("#question"), answerInput = required("#answer-input"), feedback = required("#feedback"), hintText = required("#hint-text"), questionCard = required("#question-card");
 const questionSource = required("#question-source"), roomClearToast = required("#room-clear-toast"), leaderboard = required("#leaderboard"), resultsScreen = required("#results-screen"), resultIcon = required("#result-icon"), resultTitle = required("#result-title"), resultPoints = required("#result-points"), worldCanvas = required("#world"), stickPad = required("#joystick"), stick = required("#stick"), socialPanel = required("#social-panel"), chatMessages = required("#chat-messages"), chatForm = required("#chat-form"), chatInput = required("#chat-input"), voiceEnable = required("#voice-enable"), talkButton = required("#push-to-talk"), voiceStatus = required("#voice-status");
@@ -362,13 +362,36 @@ talkButton.addEventListener("pointerdown", event => { if (!voiceStream)
 talkButton.addEventListener("pointerup", () => setTalking(false));
 talkButton.addEventListener("pointercancel", () => setTalking(false));
 window.addEventListener("blur", () => setTalking(false));
-modeEl.addEventListener("change", () => { playerCountLabel.hidden = modeEl.value === "single"; });
-playerCountLabel.hidden = modeEl.value === "single";
-introStart.addEventListener("click", () => { introScreen.hidden = true; lobby.scrollIntoView({ behavior: "smooth", block: "center" }); joinButton.focus(); });
-joinButton.addEventListener("click", () => { if (ws?.readyState === WebSocket.OPEN)
-    return; loadingMessage.textContent = "Connecting to your escape room…"; loadingScreen.hidden = false; statusEl.textContent = "Connecting…"; const proto = location.protocol === "https:" ? "wss" : "ws"; ws = new WebSocket(`${proto}://${location.host}`); ws.onopen = () => { loadingMessage.textContent = "Building your room and joining players…"; send("join_match", { mode: modeEl.value, playerCount: Number(playerCountEl.value), subject: subjectEl.value, name: nameEl.value, matchId: matchEl.value || undefined }); }; ws.onclose = () => { loadingScreen.hidden = true; stopVoice(false); statusEl.textContent = "Disconnected. Refresh to reconnect."; }; ws.onerror = () => { loadingScreen.hidden = true; statusEl.textContent = "Could not connect."; }; ws.onmessage = event => handle(JSON.parse(String(event.data))); });
+function generateRoomCode() { const bytes = crypto.getRandomValues(new Uint8Array(4)); return `EH-${Array.from(bytes, value => value.toString(16).padStart(2, "0")).join("").toUpperCase()}`; }
+if (!matchEl.value)
+    matchEl.value = generateRoomCode();
+function updateModeControls() { const single = modeEl.value === "single"; playerCountLabel.hidden = single; codeControls.hidden = single; createMatchButton.hidden = single; joinButton.textContent = single ? "Start single player" : "Join with code"; }
+modeEl.addEventListener("change", updateModeControls);
+updateModeControls();
+generateCodeButton.addEventListener("click", () => { matchEl.value = generateRoomCode(); statusEl.textContent = "New room code generated. Share it with friends before creating the room."; });
+copyCodeButton.addEventListener("click", async () => { try {
+    await navigator.clipboard.writeText(matchEl.value.trim().toUpperCase());
+    statusEl.textContent = "Room code copied. Share it with friends.";
+}
+catch {
+    matchEl.focus();
+    matchEl.select();
+    statusEl.textContent = "Select and copy the room code to share it.";
+} });
+introStart.addEventListener("click", () => { introScreen.hidden = true; lobby.scrollIntoView({ behavior: "smooth", block: "center" }); (modeEl.value === "single" ? joinButton : createMatchButton).focus(); });
+function connectToMatch(action) { if (ws?.readyState === WebSocket.OPEN)
+    return; const single = modeEl.value === "single"; if (action === "join_match" && !matchEl.value.trim()) {
+    statusEl.textContent = "Enter the room code shared by the host.";
+    matchEl.focus();
+    return;
+} if (action === "create_match" && !single && !matchEl.value.trim())
+    matchEl.value = generateRoomCode(); loadingMessage.textContent = action === "create_match" ? "Creating your room…" : "Joining the host’s room…"; loadingScreen.hidden = false; statusEl.textContent = "Connecting…"; const proto = location.protocol === "https:" ? "wss" : "ws"; const connection = new WebSocket(`${proto}://${location.host}`); ws = connection; connection.onopen = () => { loadingMessage.textContent = action === "create_match" ? "Creating the shared house…" : "Finding the shared house…"; send(action, { mode: modeEl.value, playerCount: single ? 1 : Number(playerCountEl.value), subject: subjectEl.value, name: nameEl.value, matchId: single ? undefined : matchEl.value.trim().toUpperCase() }); }; connection.onclose = () => { if (ws !== connection)
+    return; ws = null; loadingScreen.hidden = true; stopVoice(false); if (game.hidden)
+    statusEl.textContent = "Disconnected. Try joining again."; }; connection.onerror = () => { loadingScreen.hidden = true; statusEl.textContent = "Could not connect."; }; connection.onmessage = event => handle(JSON.parse(String(event.data))); }
+createMatchButton.addEventListener("click", () => connectToMatch("create_match"));
+joinButton.addEventListener("click", () => connectToMatch(modeEl.value === "single" ? "create_match" : "join_match"));
 function showResults(won, points) { loadingScreen.hidden = true; questionCard.hidden = true; stopVoice(); resultIcon.textContent = won ? "🏆" : "💔"; resultTitle.textContent = won ? "Congratulations, you won!" : "You lose. Better luck next time."; resultPoints.textContent = `Your points: ${Math.round(points)}`; resultsScreen.hidden = false; game.hidden = true; lobby.hidden = true; }
-required("#play-again").addEventListener("click", () => { resultsScreen.hidden = true; game.hidden = false; lobby.hidden = true; matchEl.value = ""; subjectEl.disabled = false; latest = null; playerId = null; matchId = null; requestedExitId = null; ws?.close(1000, "play again"); ws = null; joinButton.click(); });
+required("#play-again").addEventListener("click", () => { resultsScreen.hidden = true; game.hidden = false; lobby.hidden = true; matchEl.value = modeEl.value === "single" ? "" : generateRoomCode(); subjectEl.disabled = false; latest = null; playerId = null; matchId = null; requestedExitId = null; ws?.close(1000, "play again"); ws = null; connectToMatch("create_match"); });
 required("#exit-game").addEventListener("click", () => { resultsScreen.hidden = true; game.hidden = true; lobby.hidden = false; subjectEl.disabled = false; latest = null; playerId = null; matchId = null; requestedExitId = null; ws?.close(1000, "exit match"); ws = null; statusEl.textContent = "You left the match. Join when you are ready."; });
 let roomClearToastTimer = 0;
 function handle(event) {
@@ -389,6 +412,11 @@ function handle(event) {
         loadingScreen.hidden = true;
         statusEl.textContent = String(event.message);
         feedback.textContent = String(event.message);
+        if (game.hidden) {
+            const failed = ws;
+            ws = null;
+            failed?.close(1000, "join rejected");
+        }
         return;
     }
     if (event.type === "chat_message") {
