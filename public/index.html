@@ -2,20 +2,48 @@
 <html lang="en">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#101518">
+  <meta name="description" content="Explore a changing 3D escape room, solve questions, and race to get out.">
   <title>Escape House</title><link rel="stylesheet" href="/style.css">
   <script type="importmap">{"imports":{"three":"/vendor/three.module.js"}}</script>
 </head>
 <body><main>
+  <div id="intro-screen" class="intro-screen" role="dialog" aria-modal="true" aria-labelledby="intro-title">
+    <div class="intro-card">
+      <p class="intro-eyebrow">A 3D question adventure</p>
+      <h2 id="intro-title">Welcome to Escape House</h2>
+      <p>Find the exits hidden in your room, answer questions, and make your way out before the house changes around you.</p>
+      <ol class="intro-steps">
+        <li><strong>Explore:</strong> move with WASD, arrow keys, touch controls, or tap a spot.</li>
+        <li><strong>Get close:</strong> approach a door, window, cupboard, or drawer.</li>
+        <li><strong>Answer:</strong> a question card will follow your player in the room.</li>
+        <li><strong>Escape:</strong> correct answers open the way and transform the room.</li>
+      </ol>
+      <button id="intro-start" type="button">Enter the house</button>
+      <small>Choose a subject and single-player or multiplayer on the next screen.</small>
+    </div>
+  </div>
+  <div id="loading-screen" class="loading-screen" hidden role="status" aria-live="polite">
+    <div class="loading-card"><span class="loading-spinner" aria-hidden="true"></span><strong id="loading-message">Building your escape room…</strong><small>Getting the room and players ready.</small></div>
+  </div>
   <header><h1>Escape House</h1><p>Explore the room. Get close to an exit object to see its question.</p></header>
   <section id="lobby" class="panel"><label>Mode <select id="mode"><option value="multi">Multiplayer</option><option value="single">Single player</option></select></label><label>Question subject <select id="subject"><option value="all">All subjects</option><option value="biology">Biology</option><option value="physics">Physics</option><option value="history">History</option><option value="geography">Geography</option><option value="psychology">Psychology</option><option value="physiology">Physiology</option><option value="chemistry">Chemistry</option><option value="astronomy">Astronomy</option><option value="literature">Literature</option><option value="economics">Economics</option></select></label><label id="player-count-label">Players <select id="player-count"><option>2</option><option>3</option><option>4</option><option>5</option><option selected>6</option><option>7</option><option>8</option></select></label><label>Display name <input id="name" maxlength="20" value="Player"></label><label>Match code (optional) <input id="match" maxlength="24" placeholder="Create or join a code"></label><button id="join">Join match</button><span id="status">Connect to start playing.</span></section>
   <div id="room-clear-toast" class="room-clear-toast" role="status" aria-live="polite" hidden></div><section id="game" hidden><p id="game-status" class="status"></p>
     <div class="layout">
       <section class="panel world-panel">
         <div class="stats"><span id="phase">LOBBY</span><span id="room-stats"></span></div>
-        <div class="world-wrap"><canvas id="world" aria-label="Three dimensional escape room"></canvas><div id="nearby" class="nearby">Move near an object to inspect it.</div><div id="joystick" aria-label="Touch movement control"><div id="stick"></div></div><div class="controls">Move: WASD / arrows · click or tap a spot to walk · E: interact · touch pad</div></div>
+        <div class="world-wrap"><canvas id="world" aria-label="Three dimensional escape room"></canvas>
+          <section id="question-card" class="panel question question-float" aria-label="Room question" hidden>
+            <div class="question-heading"><h2 id="prompt-title">Room challenge</h2><span class="question-orbit" aria-hidden="true">✦</span></div>
+            <p id="question">Move near an object to reveal its question.</p>
+            <small id="question-source" class="question-source" hidden></small>
+            <form id="answer-form"><div id="answer-input"></div><div class="actions"><button id="submit" type="submit">Submit answer</button><button id="hint1" type="button">Hint 1</button><button id="hint2" type="button">Hint 2</button></div></form>
+            <p id="feedback" aria-live="polite"></p><div id="hint-text"></div>
+          </section>
+          <div id="nearby" class="nearby">Move near an object to inspect it.</div><div id="joystick" aria-label="Touch movement control"><div id="stick"></div></div><div class="controls">Move: WASD / arrows · click or tap a spot to walk · E: interact · touch pad</div>
+        </div>
       </section>
       <aside>
-        <section class="panel question"><h2 id="prompt-title">Waiting for players</h2><p id="question">Join the lobby to begin.</p><small id="question-source" class="question-source" hidden></small><form id="answer-form"><div id="answer-input"></div><div class="actions"><button id="submit" type="submit">Submit answer</button><button id="hint1" type="button">Hint 1</button><button id="hint2" type="button">Hint 2</button></div></form><p id="feedback" aria-live="polite"></p><div id="hint-text"></div></section>
         <section class="panel"><h2>Leaderboard</h2><div id="leaderboard"></div></section>
         <section id="social-panel" class="panel social-panel" aria-label="Match communication">
           <h2>Match chat</h2><p class="muted">Chat is visible to everyone in the match. Voice connects players sharing your room.</p>
@@ -35,7 +63,3 @@
       <div class="result-actions"><button id="play-again" type="button">Play again</button><button id="exit-game" class="secondary-button" type="button">Exit</button></div>
     </div>
   </section></main><script type="module" src="/client.js"></script></body></html>
-
-
-
-
