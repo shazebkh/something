@@ -17,6 +17,7 @@ COPY data ./data
 COPY db ./db
 COPY public ./public
 COPY --from=build /app/dist ./dist
+COPY launcher.mjs ./launcher.mjs
 ENV NODE_ENV=production
 EXPOSE 3000
-CMD ["node", "dist/server.js"]
+CMD ["node", "launcher.mjs"]
