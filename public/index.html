@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Escape House</title><link rel="stylesheet" href="/style.css">
+  <script type="importmap">{"imports":{"three":"/vendor/three.module.js"}}</script>
+</head>
+<body><main>
+  <header><h1>Escape House</h1><p>Explore the room. Get close to an exit object to see its question.</p></header>
+  <section id="lobby" class="panel"><label>Mode <select id="mode"><option value="multi">Multiplayer</option><option value="single">Single player</option></select></label><label>Question subject <select id="subject"><option value="all">All subjects</option><option value="biology">Biology</option><option value="physics">Physics</option><option value="history">History</option><option value="geography">Geography</option><option value="psychology">Psychology</option><option value="physiology">Physiology</option><option value="chemistry">Chemistry</option><option value="astronomy">Astronomy</option><option value="literature">Literature</option><option value="economics">Economics</option></select></label><label id="player-count-label">Players <select id="player-count"><option>2</option><option>3</option><option>4</option><option>5</option><option selected>6</option><option>7</option><option>8</option></select></label><label>Display name <input id="name" maxlength="20" value="Player"></label><label>Match code (optional) <input id="match" maxlength="24" placeholder="Create or join a code"></label><button id="join">Join match</button><span id="status">Connect to start playing.</span></section>
+  <div id="room-clear-toast" class="room-clear-toast" role="status" aria-live="polite" hidden></div><section id="game" hidden><p id="game-status" class="status"></p>
+    <div class="layout">
+      <section class="panel world-panel">
+        <div class="stats"><span id="phase">LOBBY</span><span id="room-stats"></span></div>
+        <div class="world-wrap"><canvas id="world" aria-label="Three dimensional escape room"></canvas><div id="nearby" class="nearby">Move near an object to inspect it.</div><div id="joystick" aria-label="Touch movement control"><div id="stick"></div></div><div class="controls">Move: WASD / arrows · click or tap a spot to walk · E: interact · touch pad</div></div>
+      </section>
+      <aside>
+        <section class="panel question"><h2 id="prompt-title">Waiting for players</h2><p id="question">Join the lobby to begin.</p><small id="question-source" class="question-source" hidden></small><form id="answer-form"><div id="answer-input"></div><div class="actions"><button id="submit" type="submit">Submit answer</button><button id="hint1" type="button">Hint 1</button><button id="hint2" type="button">Hint 2</button></div></form><p id="feedback" aria-live="polite"></p><div id="hint-text"></div></section>
+        <section class="panel"><h2>Leaderboard</h2><div id="leaderboard"></div></section>
+        <section id="social-panel" class="panel social-panel" aria-label="Match communication">
+          <h2>Match chat</h2><p class="muted">Chat is visible to everyone in the match. Voice connects players sharing your room.</p>
+          <div id="chat-messages" class="chat-messages" role="log" aria-live="polite" aria-relevant="additions"></div>
+          <form id="chat-form" class="chat-form"><input id="chat-input" maxlength="280" autocomplete="off" placeholder="Say something…" aria-label="Chat message"><button type="submit">Send</button></form>
+          <div class="voice-controls"><button id="voice-enable" type="button">Enable microphone</button><button id="push-to-talk" type="button" disabled>Hold to talk</button><span id="voice-status" role="status">Voice off</span></div>
+          <small class="muted">Voice is peer-to-peer and is not recorded. Use headphones to reduce echo.</small>
+        </section>
+      </aside>
+    </div>
+  </section>
+  <section id="results-screen" class="results-screen" hidden aria-live="polite">
+    <div class="results-card">
+      <div id="result-icon" class="result-icon" aria-hidden="true">🏆</div>
+      <h2 id="result-title">Congratulations, you won!</h2>
+      <p id="result-points">Final points: 0</p>
+      <div class="result-actions"><button id="play-again" type="button">Play again</button><button id="exit-game" class="secondary-button" type="button">Exit</button></div>
+    </div>
+  </section></main><script type="module" src="/client.js"></script></body></html>
+
+
+
+

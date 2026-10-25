@@ -1,0 +1,51 @@
+ESCAPE HOUSE — PROJECT SUMMARY
+
+OVERVIEW
+Escape House is a TypeScript real-time multiplayer quiz escape game. Players explore procedural 3D rooms, approach an exit object, answer a question, and move to another room. The first player to the exit wins. Single-player runs start immediately. Multiplayer matches support 2–8 players and use a calibration phase.
+
+PLAYER EXPERIENCE
+- Third-person 3D room rendered with Three.js.
+- Keyboard, touch joystick, and click/tap-to-walk movement with animated player limbs.
+- Roommates are shown as moving player avatars when they share a room.
+- Questions appear when approaching a door, window, cupboard, or drawer.
+- Correct answers move or teleport the player and change the room's floor, color, and props.
+- Wrong answers shrink the visible room, add strikes, and apply an exit lockout.
+- Hint costs, scoring, ranking, match timing, crushed-player results, win/loss screens, and replay controls.
+- Host-selected question subject in multiplayer; per-player subject selection in single-player.
+- Multiplayer match chat is visible to all players. Push-to-talk WebRTC voice is relayed only between players in the same room. Voice is not recorded.
+- On a correct room clear, every other connected player sees a popup naming the player who cleared it.
+
+SUBJECTS
+All subjects, biology, physics, history, geography, psychology, physiology, chemistry, astronomy, literature, and economics. A player does not receive a repeated question in the same match. The bundled bank contains 110 questions, including 20 psychology questions; each subject has a finite pool; the server reports when that pool is exhausted.
+
+MULTIPLAYER HOSTING
+The first player to create a match is its host. The host selects the subject and player count before joining. Other players join using the match code and must select the same player count. The server enforces the match's host-selected subject and count.
+
+QUESTION AGENT AND DATABASE
+A background question agent can fetch random English Wikipedia article summaries, ask an OpenAI model for a structured MCQ, validate four unique choices and a verbatim supporting quote, and save the question plus source URL in PostgreSQL. Stored questions are loaded into the live randomized question pool. It requires both DATABASE_URL and OPENAI_API_KEY; neither is included in this project. Set them as server environment variables. The bundled bank works without these credentials.
+
+STACK
+- TypeScript / Node.js 24+
+- Authoritative WebSocket server
+- Three.js browser client
+- PostgreSQL for matches, sourced questions, users, and answer events
+- Optional Redis match snapshots
+- Seeded house graph and rules engine
+
+LOCAL SETUP
+1. Install Node.js 24+ and npm.
+2. Run npm install.
+3. Run npm test, npm run typecheck, and npm run build:client.
+4. Run npm run server and open http://localhost:3000.
+5. Use Docker Compose with `docker compose up --build` if Docker is installed.
+
+TEST STATUS
+19 tests pass, including house invariants over 1,000 seeds, rules, question-bank format, subject filtering, tier preference, and no-repeat selection. TypeScript typecheck and client build pass.
+
+PUBLIC DEPLOYMENT STATUS
+Chat, room presence, voice, pointer movement, mobile styling, and sourced psychology questions are implemented. Render deployment configuration is prepared in render.yaml. RENDER-DEPLOYMENT.txt has setup steps and current limits. No public deployment exists: this workspace has no Git repository or remote, the available Render workspace is not the requested Game workspace, and there is no GitHub repository or remote. The Blueprint uses free plans; Render free web services may sleep after 15 minutes, and free PostgreSQL expires after 30 days. Upgrade to paid resources for a durable public launch.
+
+
+
+
+

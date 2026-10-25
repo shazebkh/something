@@ -1,0 +1,20 @@
+ESCAPE HOUSE — RENDER DEPLOYMENT
+
+DEPLOYMENT CONFIGURATION
+This folder contains render.yaml. Render Blueprint uses it to create a Docker web service and a PostgreSQL database in Singapore. The web service health check uses /healthz. OPENAI_API_KEY is optional; provide it in the Render dashboard to enable AI question generation. The bundled questions work without it.
+
+DEPLOY STEPS
+1. Put this project folder in a GitHub repository. This workspace currently has no Git repository or remote configured.
+2. In the Render dashboard, create a new Blueprint and connect that repository.
+3. Review the resources from render.yaml and apply the Blueprint.
+4. Set OPENAI_API_KEY if AI question generation should run. Do not put secrets in Git or render.yaml.
+5. Wait for the service health check to pass, then share the generated onrender.com URL.
+
+FREE-TIER LIMITS
+The included Blueprint uses free plans to avoid selecting paid resources without approval. Render free web services can sleep after 15 minutes of inactivity and take about a minute to wake. Render free PostgreSQL expires after 30 days. Free plans are for preview/hobby use, not a durable public launch. Upgrade the web service and database to paid plans for dependable public use and retained database data.
+
+CURRENT STATUS
+The Render account connection is active, but it only lists My Workspace; the requested Game workspace is not visible. This folder has no Git repository or remote, and GitHub is not connected. No deployment has been created. The user selected the free preview plan. This file does not claim the app is live.
+
+
+
