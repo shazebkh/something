@@ -142,11 +142,13 @@ Sec-WebSocket-Accept: ${accept}\r
 async function bootstrap():Promise<void>{
  if(process.env.REDIS_URL){try{const redis=await import("redis");redisClient=redis.createClient({url:process.env.REDIS_URL});redisClient.on("error",(e:Error)=>console.error("redis",e.message));await redisClient.connect();console.log("Redis live-state snapshots enabled");}catch(e){console.error("Redis unavailable; live state remains in process memory",(e as Error).message);redisClient=null;}}
  if(process.env.DATABASE_URL){try{const pg=await import("pg");pgPool=new pg.Pool({connectionString:process.env.DATABASE_URL});await pgPool.query(readFileSync(resolve(ROOT,"db/schema.sql"),"utf8"));for(const q of questions)await storeQuestion(q);const stored=await pgPool.query("SELECT question FROM questions WHERE id LIKE 'ai-%'");const known=new Set(questions.map(q=>q.id));for(const row of stored.rows){const q=(row.question??null) as Question|null;if(q?.id&&!known.has(q.id)&&q.text&&q.answer){known.add(q.id);questions.push(q);}}console.log(`PostgreSQL enabled; ${questions.length} questions loaded`);if(process.env.OPENAI_API_KEY)startQuestionAgent();else console.log("Question agent is off; set OPENAI_API_KEY to enable it");}catch(e){console.error("PostgreSQL unavailable; answer logging disabled",(e as Error).message);if(pgPool)await pgPool.end().catch(()=>{});pgPool=null;}}
+ server.on("error",(error)=>{console.error("Escape House server error",error);process.exitCode=1;});
  server.listen(PORT,()=>console.log(`Escape House server listening at http://localhost:${PORT}`));
 }
-void bootstrap();
+void bootstrap().catch((error: unknown) => { console.error("Escape House startup failed", error); process.exitCode = 1; });
 process.on("SIGINT",()=>{server.close(()=>process.exit(0));});
 process.on("SIGTERM",()=>{server.close(()=>process.exit(0));});
+
 
 
 
