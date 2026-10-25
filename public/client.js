@@ -472,35 +472,55 @@ function handle(event) {
         showResults(false, latest?.player.score ?? 0);
 }
 let builtRoomId = "";
-function renderQuestion(data) { const active = !!data.question && !data.player.crushed && !data.player.exited; questionCard.hidden = !active; questionEl.textContent = data.question?.text ?? (data.phase === "LOBBY" ? "Waiting for 6 players to start…" : data.phase === "CALIBRATION" ? "Answer the shared calibration question." : "Move near a room object to reveal its question."); questionSource.replaceChildren(); questionSource.hidden = true; if (data.question?.source_url) {
-    const link = document.createElement("a");
-    link.href = data.question.source_url;
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
-    link.textContent = `Source: ${data.question.source_title ?? "Wikipedia"}`;
-    questionSource.append(link);
-    questionSource.hidden = false;
-} const title = required("#prompt-title"); title.textContent = data.question ? `Tier ${data.question.tier} question` : "Room challenge"; answerInput.replaceChildren(); if (data.question?.type === "mcq") {
-    for (const option of data.question.options) {
-        const label = document.createElement("label");
-        label.className = "choice";
-        const input = document.createElement("input");
-        input.type = "radio";
-        input.name = "answer";
-        input.value = option;
-        label.append(input, document.createTextNode(option));
-        answerInput.append(label);
+let renderedQuestionKey = "";
+function renderQuestion(data) {
+    const active = !!data.question && !data.player.crushed && !data.player.exited;
+    questionCard.hidden = !active;
+    const questionKey = `${data.phase}:${data.question ? JSON.stringify(data.question) : "none"}`;
+    if (questionKey !== renderedQuestionKey) {
+        renderedQuestionKey = questionKey;
+        questionEl.textContent = data.question?.text ?? (data.phase === "LOBBY" ? "Waiting for players to start…" : data.phase === "CALIBRATION" ? "Answer the shared calibration question." : "Move near a room object to reveal its question.");
+        questionSource.replaceChildren();
+        questionSource.hidden = true;
+        if (data.question?.source_url) {
+            const link = document.createElement("a");
+            link.href = data.question.source_url;
+            link.target = "_blank";
+            link.rel = "noopener noreferrer";
+            link.textContent = `Source: ${data.question.source_title ?? "Wikipedia"}`;
+            questionSource.append(link);
+            questionSource.hidden = false;
+        }
+        required("#prompt-title").textContent = data.question ? `Tier ${data.question.tier} question` : "Room challenge";
+        answerInput.replaceChildren();
+        if (data.question?.type === "mcq") {
+            for (const option of data.question.options) {
+                const label = document.createElement("label");
+                label.className = "choice";
+                const input = document.createElement("input");
+                input.type = "radio";
+                input.name = "answer";
+                input.value = option;
+                label.append(input, document.createTextNode(option));
+                answerInput.append(label);
+            }
+        }
+        else if (data.question) {
+            const input = document.createElement("input");
+            input.type = "text";
+            input.name = "answer";
+            input.autocomplete = "off";
+            input.placeholder = "Your answer";
+            answerInput.append(input);
+        }
+        questionCard.scrollTop = 0;
     }
+    required("#submit").disabled = !active;
+    required("#hint1").disabled = !active || data.phase !== "LIVE";
+    required("#hint2").disabled = !active || data.phase !== "LIVE";
+    if (targetFixture)
+        nearby.textContent = data.player.crushed ? "Your room collapsed." : data.lockedOut ? "Exit locked. Move to another object." : data.question ? "Question ready. Answer in the box." : "Near the exit object.";
 }
-else if (data.question) {
-    const input = document.createElement("input");
-    input.type = "text";
-    input.name = "answer";
-    input.autocomplete = "off";
-    input.placeholder = "Your answer";
-    answerInput.append(input);
-} required("#submit").disabled = !active; required("#hint1").disabled = !active || data.phase !== "LIVE"; required("#hint2").disabled = !active || data.phase !== "LIVE"; if (targetFixture)
-    nearby.textContent = data.player.crushed ? "Your room collapsed." : data.lockedOut ? "Exit locked. Move to another object." : data.question ? "Question ready. Answer in the box." : "Near the exit object."; }
 required("#answer-form").addEventListener("submit", event => { event.preventDefault(); const value = answerInput.querySelector("input:checked")?.value ?? answerInput.querySelector('input[type="text"]')?.value; if (!value) {
     feedback.textContent = "Choose or enter an answer first.";
     return;
