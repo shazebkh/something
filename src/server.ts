@@ -13,8 +13,8 @@ import { beginQuestion, createPlayerRulesState, difficultyTier, markExited, rank
 type Question = { id:string; type:"mcq"|"fill_blank"; tier:number; trait_tag:string; text:string; options:string[]; answer:string; hint1:string; hint2:string; source_url?:string|undefined; source_title?:string|undefined; evidence_quote?:string };
 type Phase = "LOBBY"|"CALIBRATION"|"LIVE"|"ENDING"|"RESULTS";
 type Exit = {id:string;type:"door"|"window"|"cupboard"|"drawer";targetRoomId:string|null;tier:number};
-type Player = {id:string;name:string;socket:Socket;roomId:string;position:{x:number;z:number};lastMoveAt:number;lastChatAt:number;voiceReady:boolean;state:PlayerRulesState;seen:Set<string>;exits:Exit[];question:Question|null;questionStartedAt:number;calibrationIndex:number;farStreak:number;hintUsed:Set<number>};
-type Match = {id:string;mode:MatchMode;targetPlayers:number;subject:QuestionSubject;hostPlayerId:string;phase:Phase;seed:number;house:House;players:Map<string,Player>;startedAt:number|null;endedAt:number|null;calibrationTimer:ReturnType<typeof setTimeout>|null};
+type Player = {id:string;name:string;playerNumber:number;socket:Socket;roomId:string;position:{x:number;z:number};lastMoveAt:number;lastChatAt:number;voiceReady:boolean;state:PlayerRulesState;seen:Set<string>;exits:Exit[];question:Question|null;questionStartedAt:number;calibrationIndex:number;farStreak:number;hintUsed:Set<number>};
+type Match = {id:string;nextPlayerNumber:number;startCountdownTimer:ReturnType<typeof setInterval>|null;startCountdownEndsAt:number|null;mode:MatchMode;targetPlayers:number;subject:QuestionSubject;hostPlayerId:string;phase:Phase;seed:number;house:House;players:Map<string,Player>;startedAt:number|null;endedAt:number|null;calibrationTimer:ReturnType<typeof setTimeout>|null};
 type ClientEvent = {type:string;mode?:string;playerCount?:number;subject?:string;playerId?:string;name?:string;matchId?:string;exitId?:string;answer?:string;hintLevel?:number;text?:string;x?:number;z?:number;ready?:boolean;targetId?:string;signal?:unknown};
 const ROOT=resolve(dirname(fileURLToPath(import.meta.url)),"..");
 let questions=JSON.parse(readFileSync(resolve(ROOT,"data/questions.json"),"utf8")) as Question[];
@@ -35,10 +35,10 @@ function parseFrames(socket:Socket,consume:(text:string)=>void):void{
 }
 function safeQuestion(q:Question):Omit<Question,"answer"|"hint1"|"hint2"|"evidence_quote">{const{id,type,tier,trait_tag,text,options,source_url,source_title}=q;return{id,type,tier,trait_tag,text,options,source_url,source_title};}
 function currentExits(match:Match,p:Player):Exit[]{const room=match.house.rooms.find(r=>r.id===p.roomId)!;return room.exits.map((e,index)=>({id:`${p.roomId}:${index}`,type:e.type,targetRoomId:e.type==="door"?e.targetRoomId:null,tier:difficultyTier(e.type,match.house.distanceToExit[p.roomId]!)}));}
-function roomRoster(match:Match,p:Player):object[]{return [...match.players.values()].filter(other=>other.id!==p.id&&other.roomId===p.roomId).map(other=>({id:other.id,name:other.name,x:other.position.x,z:other.position.z,voiceReady:other.voiceReady}));}
-function broadcastRoomPlayers(match:Match,roomId:string):void{const members=[...match.players.values()].filter(p=>p.roomId===roomId);for(const p of members)send(p.socket,{type:"players_update",players:members.filter(other=>other.id!==p.id).map(other=>({id:other.id,name:other.name,x:other.position.x,z:other.position.z,voiceReady:other.voiceReady}))});}
-function roomUpdate(match:Match,p:Player):object{return{type:"room_update",phase:match.phase,players:roomRoster(match,p),player:{id:p.id,name:p.name,roomSize:p.state.roomSize,strikes:p.state.strikes,score:Math.round(p.state.score),crushed:p.state.crushed,roomId:p.roomId,distance:match.house.distanceToExit[p.roomId],exited:p.state.exitedAt!==null},room:{id:p.roomId,exits:currentExits(match,p)},house:{exitRoomId:match.house.exitRoomId,rooms:match.house.rooms.map(r=>({id:r.id,distance:match.house.distanceToExit[r.id],edges:match.house.edges.filter(e=>e.from===r.id||e.to===r.id).map(e=>e.from===r.id?e.to:e.from)}))},question:p.question?safeQuestion(p.question):null,lockedOut:Date.now()<p.state.lockoutUntil,match:{id:match.id,subject:match.subject,isHost:match.hostPlayerId===p.id,playerCount:match.players.size,requiredPlayers:requiredPlayers(match.mode,match.targetPlayers)}};}
-function leaderboard(match:Match):object{const rows=[...match.players.values()].map(p=>({playerId:p.id,name:p.name,distanceToFinish:p.state.exitedAt===null?match.house.distanceToExit[p.roomId]!:0,strikes:p.state.strikes,score:p.state.score,crushed:p.state.crushed,exitedAt:p.state.exitedAt}));return{type:"leaderboard_update",players:rankPlayers(rows).map((p,index)=>({rank:index+1,...p}))};}
+function roomRoster(match:Match,p:Player):object[]{return [...match.players.values()].filter(other=>other.id!==p.id&&other.roomId===p.roomId).map(other=>({id:other.id,name:other.name,playerNumber:other.playerNumber,isHost:other.id===match.hostPlayerId,x:other.position.x,z:other.position.z,voiceReady:other.voiceReady}));}
+function broadcastRoomPlayers(match:Match,roomId:string):void{const members=[...match.players.values()].filter(p=>p.roomId===roomId);for(const p of members)send(p.socket,{type:"players_update",players:members.filter(other=>other.id!==p.id).map(other=>({id:other.id,name:other.name,playerNumber:other.playerNumber,isHost:other.id===match.hostPlayerId,x:other.position.x,z:other.position.z,voiceReady:other.voiceReady}))});}
+function roomUpdate(match:Match,p:Player):object{return{type:"room_update",phase:match.phase,players:roomRoster(match,p),player:{id:p.id,name:p.name,roomSize:p.state.roomSize,strikes:p.state.strikes,score:Math.round(p.state.score),crushed:p.state.crushed,roomId:p.roomId,distance:match.house.distanceToExit[p.roomId],exited:p.state.exitedAt!==null},room:{id:p.roomId,exits:currentExits(match,p)},house:{exitRoomId:match.house.exitRoomId,rooms:match.house.rooms.map(r=>({id:r.id,distance:match.house.distanceToExit[r.id],edges:match.house.edges.filter(e=>e.from===r.id||e.to===r.id).map(e=>e.from===r.id?e.to:e.from)}))},question:p.question?safeQuestion(p.question):null,lockedOut:Date.now()<p.state.lockoutUntil,match:{id:match.id,subject:match.subject,isHost:match.hostPlayerId===p.id,playerCount:match.players.size,requiredPlayers:requiredPlayers(match.mode,match.targetPlayers),startCountdownActive:match.startCountdownTimer!==null,startCountdownSeconds:match.startCountdownEndsAt===null?0:Math.max(0,Math.ceil((match.startCountdownEndsAt-Date.now())/1000))}};}
+function leaderboard(match:Match):object{const rows=[...match.players.values()].map(p=>({playerId:p.id,playerNumber:p.playerNumber,isHost:p.id===match.hostPlayerId,name:p.name,distanceToFinish:p.state.exitedAt===null?match.house.distanceToExit[p.roomId]!:0,strikes:p.state.strikes,score:p.state.score,crushed:p.state.crushed,exitedAt:p.state.exitedAt}));return{type:"leaderboard_update",players:rankPlayers(rows).map((p,index)=>({rank:index+1,...p}))};}
 function publish(match:Match):void{for(const p of match.players.values())send(p.socket,roomUpdate(match,p));broadcast(match,leaderboard(match));void saveMatch(match);}
 function randomUnseen(match:Match,p:Player,tier:number):Question|null{const q=pickQuestion(questions,tier,match.subject,p.seen);if(!q)return null;p.seen.add(q.id);p.question=q;return q;}
 function issueQuestion(match:Match,p:Player):void{
@@ -53,11 +53,12 @@ async function storeQuestion(q:Question):Promise<boolean>{if(!pgPool)return fals
 async function answerEvent(match:Match,p:Player,q:Question,correct:boolean,elapsedMs:number):Promise<void>{if(!pgPool)return;try{await persistMatch(match);await pgPool.query("INSERT INTO users(id,display_name) VALUES($1,$2) ON CONFLICT(id) DO UPDATE SET display_name=EXCLUDED.display_name",[p.id,p.name]);await storeQuestion(q);await pgPool.query("INSERT INTO answer_events(id,match_id,player_id,question_id,correct,elapsed_ms,tier,exit_id,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)",[randomUUID(),match.id,p.id,q.id,correct,elapsedMs,q.tier,p.state.selectedExitId,new Date().toISOString()]);}catch(e){console.error("answer log failed",(e as Error).message);}}
 function startQuestionAgent():void{const key=process.env.OPENAI_API_KEY;if(!key||!pgPool)return;const model=process.env.OPENAI_MODEL??"gpt-4.1-mini",configured=Number(process.env.QUESTION_AGENT_INTERVAL_MS??600_000),interval=Math.max(60_000,Number.isFinite(configured)?configured:600_000);const run=async()=>{try{const generated=await generateQuestion(key,model,1+Math.floor(Math.random()*5));generated.id=`ai-${createHash("sha256").update(normalize(generated.text)).digest("hex").slice(0,24)}`;if(questions.some(q=>normalize(q.text)===normalize(generated.text)))throw new Error("Generated a duplicate question");if(await storeQuestion(generated)){questions.push(generated);console.log(`Question agent stored ${generated.id} from ${generated.source_title}`);}else console.log("Question agent skipped a duplicate database question");}catch(e){console.error("Question agent failed",(e as Error).message);}finally{const timer=setTimeout(()=>void run(),interval);timer.unref();}};const timer=setTimeout(()=>void run(),1500);timer.unref();console.log(`Question agent enabled; generating one Wikipedia-sourced question every ${Math.round(interval/1000)} seconds with ${model}`);}
 function endMatch(match:Match):void{if(match.phase==="RESULTS")return;match.phase="ENDING";match.endedAt=Date.now();if(match.calibrationTimer)clearTimeout(match.calibrationTimer);match.phase="RESULTS";const board=leaderboard(match);broadcast(match,{...board,type:"match_end",reason:[...match.players.values()].some(p=>p.state.exitedAt!==null)?"exit":"time_limit"});void saveMatch(match);}
-function startMatch(match:Match):void{
+function startMatch(match:Match,startImmediately=false):void{
  if(match.phase!=="LOBBY")return;
+ if(match.startCountdownTimer){clearInterval(match.startCountdownTimer);match.startCountdownTimer=null;}match.startCountdownEndsAt=null;
  match.startedAt=Date.now();
- match.phase=openingPhase(match.mode);
- if(match.mode==="single"){
+ match.phase=startImmediately?"LIVE":openingPhase(match.mode);
+ if(match.mode==="single"||startImmediately){
   broadcast(match,{type:"phase_change",phase:"LIVE",mode:match.mode});
   publish(match);
   setTimeout(()=>{if(match.phase!=="RESULTS")endMatch(match);},MATCH_MS);
@@ -77,18 +78,27 @@ function startMatch(match:Match):void{
  publish(match);
  setTimeout(()=>{if(match.phase!=="RESULTS")endMatch(match);},MATCH_MS);
 }
-function createMatch(id:string,mode:MatchMode,targetPlayers:number,subject:QuestionSubject,hostPlayerId:string):Match{const seed=Math.floor(Math.random()*2**32),match:Match={id,mode,targetPlayers,subject,hostPlayerId,phase:"LOBBY",seed,house:generateHouse({seed}),players:new Map(),startedAt:null,endedAt:null,calibrationTimer:null};matches.set(id,match);return match;}
+function toggleStartCountdown(match:Match):void{
+ if(match.startCountdownTimer){clearInterval(match.startCountdownTimer);match.startCountdownTimer=null;match.startCountdownEndsAt=null;broadcast(match,{type:"countdown_cancelled"});return;}
+ let seconds=5;
+ broadcast(match,{type:"start_countdown",seconds});
+ match.startCountdownTimer=setInterval(()=>{
+  seconds--;
+  if(seconds<=0){clearInterval(match.startCountdownTimer!);match.startCountdownTimer=null;match.startCountdownEndsAt=null;broadcast(match,{type:"start_countdown",seconds:0});startMatch(match,true);return;}
+  broadcast(match,{type:"start_countdown",seconds});
+ },1000);
+}function createMatch(id:string,mode:MatchMode,targetPlayers:number,subject:QuestionSubject,hostPlayerId:string):Match{const seed=Math.floor(Math.random()*2**32),match:Match={id,nextPlayerNumber:1,startCountdownTimer:null,startCountdownEndsAt:null,mode,targetPlayers,subject,hostPlayerId,phase:"LOBBY",seed,house:generateHouse({seed}),players:new Map(),startedAt:null,endedAt:null,calibrationTimer:null};matches.set(id,match);return match;}
 function normalize(value:string):string{return value.normalize("NFKC").trim().toLowerCase().replace(/\s+/g," ");}
 function handleMessage(p:Player,raw:string):void{
  let msg:ClientEvent;try{msg=JSON.parse(raw) as ClientEvent;}catch{emitError(p,"Invalid JSON event");return;}
  const match=[...matches.values()].find(m=>m.players.has(p.id));if(!match){emitError(p,"Join a match first");return;}
- if(msg.type==="start_match"){if(match.phase!=="LOBBY"){emitError(p,"This game has already started");return;}if(match.hostPlayerId!==p.id){emitError(p,"Only the host can start the game");return;}startMatch(match);return;}
+ if(msg.type==="start_match"){if(match.phase!=="LOBBY"){emitError(p,"This game has already started");return;}if(match.hostPlayerId!==p.id){emitError(p,"Only the host can start the game");return;}toggleStartCountdown(match);return;}
  if(msg.type==="move") {
   if(match.phase!=="LIVE"||p.state.crushed||p.state.exitedAt!==null)return;
   const now=Date.now();if(now-p.lastMoveAt<75)return;const x=Number(msg.x),z=Number(msg.z);if(!Number.isFinite(x)||!Number.isFinite(z))return;const elapsed=Math.max(0,Math.min(500,now-p.lastMoveAt))/1000;const maxStep=4*elapsed+.28,dx=x-p.position.x,dz=z-p.position.z;if(Math.hypot(dx,dz)>maxStep)return;const scale=Math.sqrt(Math.max(.25,Math.min(1,p.state.roomSize/100)));p.position={x:Math.max(-5.35*scale,Math.min(5.35*scale,x)),z:Math.max(-3.35*scale,Math.min(3.35*scale,z))};p.lastMoveAt=now;broadcastRoomPlayers(match,p.roomId);return;
  }
  if(msg.type==="chat") {
-  const now=Date.now();if(match.phase==="RESULTS"||now-p.lastChatAt<650)return;const text=String(msg.text??"").normalize("NFKC").replace(/[\u0000-\u001f\u007f]/g," ").trim().slice(0,280);if(!text)return;p.lastChatAt=now;broadcast(match,{type:"chat_message",senderId:p.id,senderName:p.name,text,sentAt:now});return;
+  const now=Date.now();if(match.phase==="RESULTS"||now-p.lastChatAt<650)return;const text=String(msg.text??"").normalize("NFKC").replace(/[\u0000-\u001f\u007f]/g," ").trim().slice(0,280);if(!text)return;p.lastChatAt=now;broadcast(match,{type:"chat_message",senderId:p.id,senderName:p.name,senderNumber:p.playerNumber,senderIsHost:p.id===match.hostPlayerId,text,sentAt:now});return;
  }
  if(msg.type==="voice_ready"){if(match.phase==="RESULTS")return;p.voiceReady=msg.ready===true;broadcastRoomPlayers(match,p.roomId);return;}
  if(msg.type==="voice_signal"){if(match.phase==="RESULTS"||!msg.targetId||!msg.signal)return;const target=match.players.get(msg.targetId);if(target&&target.roomId===p.roomId&&target.voiceReady&&p.voiceReady)send(target.socket,{type:"voice_signal",fromId:p.id,signal:msg.signal});return;}
@@ -176,11 +186,10 @@ Sec-WebSocket-Accept: ${accept}\r
    }
    const name=(message.name?.trim()||"Player").slice(0,20);
    const roomId=match.house.startRoomIds[0]??match.house.rooms[0]!.id;
-   player={id:playerId,name,socket:socket as Socket,roomId,position:{x:0,z:0},lastMoveAt:0,lastChatAt:0,voiceReady:false,state:createPlayerRulesState(),seen:new Set(),exits:[],question:null,questionStartedAt:0,calibrationIndex:0,farStreak:0,hintUsed:new Set()};
+   player={id:playerId,name,playerNumber:match.nextPlayerNumber++,socket:socket as Socket,roomId,position:{x:0,z:0},lastMoveAt:0,lastChatAt:0,voiceReady:false,state:createPlayerRulesState(),seen:new Set(),exits:[],question:null,questionStartedAt:0,calibrationIndex:0,farStreak:0,hintUsed:new Set()};
    match.players.set(playerId,player);
-   send(socket as Socket,{type:"joined",matchId:id,playerId,players:match.players.size,requiredPlayers:requiredPlayers(match.mode,match.targetPlayers),mode:match.mode,subject:match.subject,isHost:match.hostPlayerId===playerId});
-   publish(match);
-   if(match.players.size>=requiredPlayers(match.mode,match.targetPlayers))startMatch(match);
+   send(socket as Socket,{type:"joined",matchId:id,playerId,playerNumber:player.playerNumber,players:match.players.size,requiredPlayers:requiredPlayers(match.mode,match.targetPlayers),mode:match.mode,subject:match.subject,isHost:match.hostPlayerId===playerId});
+   if(match.mode==="single")startMatch(match);else publish(match);
    return;
   }
   handleMessage(player,raw);
@@ -191,7 +200,7 @@ Sec-WebSocket-Accept: ${accept}\r
   if(!match)return;
   match.players.delete(player.id);
   if(match.hostPlayerId===player.id)match.hostPlayerId=match.players.keys().next().value??"";
-  if(match.players.size===0){if(match.calibrationTimer)clearTimeout(match.calibrationTimer);matches.delete(match.id);}
+  if(match.players.size===0){if(match.calibrationTimer)clearTimeout(match.calibrationTimer);if(match.startCountdownTimer)clearInterval(match.startCountdownTimer);matches.delete(match.id);}
   else publish(match);
  });
 });
