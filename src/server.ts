@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { createHash, randomUUID } from "node:crypto";
 import type { Socket } from "node:net";
 import { chooseTeleportDestination, generateHouse, type House } from "./house.ts";
-import { maximumPlayers, openingPhase, parseMatchMode, requiredPlayers, type MatchMode } from "./matchMode.ts";
+import { openingPhase, parseMatchMode, requiredPlayers, type MatchMode } from "./matchMode.ts";
 import { generateQuestion } from "./questionAgent.ts";
 import { parseQuestionSubject, pickQuestion, type QuestionSubject } from "./subjects.ts";
 import { beginQuestion, createPlayerRulesState, difficultyTier, markExited, rankPlayers, requestHint, selectExit, submitAnswer, type PlayerRulesState } from "./rules.ts";
@@ -132,14 +132,68 @@ function serveStatic(req:IncomingMessage,res:any):void {
  createReadStream(path).on("error",()=>res.destroy()).pipe(res);
 }
 const server=createServer(serveStatic);
-server.on("upgrade",(req,socket)=>{socket.on("error",()=>{});const key=req.headers["sec-websocket-key"];if(!key){socket.destroy();return;}const accept=createHash("sha1").update(key+"258EAFA5-E914-47DA-95CA-C5AB0DC85B11").digest("base64");socket.write(`HTTP/1.1 101 Switching Protocols\r
+server.on("upgrade",(req,socket)=>{
+ socket.on("error",()=>{});
+ const key=req.headers["sec-websocket-key"];
+ if(!key){socket.destroy();return;}
+ const accept=createHash("sha1").update(key+"258EAFA5-E914-47DA-95CA-C5AB0DC85B11").digest("base64");
+ socket.write(`HTTP/1.1 101 Switching Protocols\r
 Upgrade: websocket\r
 Connection: Upgrade\r
 Sec-WebSocket-Accept: ${accept}\r
 \r
-`);let player:Player|null=null;parseFrames(socket as Socket,raw=>{if(!player){let m:ClientEvent;try{m=JSON.parse(raw) as ClientEvent;}catch{return;}if(m.type!=="join_match")return;const id=m.matchId?.trim()||`EH-${randomUUID().slice(0,8).toUpperCase()}`;const mode=parseMatchMode(m.mode),requestedCount=mode==="single"?1:Number(m.playerCount??6),requestedSubject=parseQuestionSubject(m.subject??"all"),playerId=m.playerId?.trim()||randomUUID();if(mode==="multi"&&(!Number.isInteger(requestedCount)||requestedCount<2||requestedCount>8)){send(socket as Socket,{type:"error",message:"Choose between 2 and 8 multiplayer players"});return;}if(!requestedSubject){send(socket as Socket,{type:"error",message:"Choose a valid question subject"});return;}let match=matches.get(id);if(!match)match=createMatch(id,mode,requestedCount,requestedSubject,playerId);if(match.mode!==mode||match.targetPlayers!==requestedCount||match.phase!=="LOBBY"||match.players.size>=maximumPlayers(match.mode,match.targetPlayers)){send(socket as Socket,{type:"error",message:"Mode/player-count mismatch, match is full, or the match already started"});return;}const name=(m.name?.trim()||"Player").slice(0,20);const starts=match.house.startRoomIds;const roomId=starts[match.players.size%starts.length]!;player={id:playerId,name,socket:socket as Socket,roomId,position:{x:0,z:0},lastMoveAt:0,lastChatAt:0,voiceReady:false,state:createPlayerRulesState(),seen:new Set(),exits:[],question:null,questionStartedAt:0,calibrationIndex:0,farStreak:0,hintUsed:new Set()};match.players.set(playerId,player);send(socket as Socket,{type:"joined",matchId:id,playerId,players:match.players.size,requiredPlayers:requiredPlayers(match.mode,match.targetPlayers),mode:match.mode,subject:match.subject,isHost:match.hostPlayerId===playerId});publish(match);if(match.players.size>=requiredPlayers(match.mode,match.targetPlayers))startMatch(match);return;}handleMessage(player,raw);});socket.on("close",()=>{if(player){const m=[...matches.values()].find(x=>x.players.has(player!.id));if(m){m.players.delete(player!.id);if(m.hostPlayerId===player!.id)m.hostPlayerId=m.players.keys().next().value??"";if(m.players.size===0){if(m.calibrationTimer)clearTimeout(m.calibrationTimer);matches.delete(m.id);}else publish(m);}}});});
-
-
+`);
+ let player:Player|null=null;
+ parseFrames(socket as Socket,raw=>{
+  if(!player){
+   let message:ClientEvent;
+   try{message=JSON.parse(raw) as ClientEvent;}catch{return;}
+   const creating=message.type==="create_match";
+   if(!creating&&message.type!=="join_match")return;
+   const mode=parseMatchMode(message.mode);
+   const requestedCount=mode==="single"?1:Number(message.playerCount??6);
+   const playerId=message.playerId?.trim()||randomUUID();
+   const roomCode=(message.matchId??"").trim().toUpperCase();
+   let match:Match|undefined;
+   let id=roomCode;
+   if(creating){
+    if(mode==="multi"&&(!Number.isInteger(requestedCount)||requestedCount<2||requestedCount>8)){send(socket as Socket,{type:"error",message:"Choose between 2 and 8 multiplayer players"});return;}
+    const subject=parseQuestionSubject(message.subject??"all");
+    if(!subject){send(socket as Socket,{type:"error",message:"Choose a valid question subject"});return;}
+    if(!id)id=`EH-${randomUUID().slice(0,8).toUpperCase()}`;
+    if(matches.has(id)){send(socket as Socket,{type:"error",message:"That room code is already active. Generate a new code and try again."});return;}
+    match=createMatch(id,mode,requestedCount,subject,playerId);
+   }else{
+    if(!roomCode){send(socket as Socket,{type:"error",message:"Enter the room code shared by the host."});return;}
+    match=matches.get(roomCode);
+    if(!match){send(socket as Socket,{type:"error",message:"Room code not found. Check the code or ask the host to create the room first."});return;}
+    id=roomCode;
+    if(match.mode!==mode){send(socket as Socket,{type:"error",message:"Choose the same game mode as the host."});return;}
+   }
+   if(match.phase!=="LOBBY"||match.players.size>=requiredPlayers(match.mode,match.targetPlayers)){
+    send(socket as Socket,{type:"error",message:"This room is full or has already started."});return;
+   }
+   const name=(message.name?.trim()||"Player").slice(0,20);
+   const roomId=match.house.startRoomIds[0]??match.house.rooms[0]!.id;
+   player={id:playerId,name,socket:socket as Socket,roomId,position:{x:0,z:0},lastMoveAt:0,lastChatAt:0,voiceReady:false,state:createPlayerRulesState(),seen:new Set(),exits:[],question:null,questionStartedAt:0,calibrationIndex:0,farStreak:0,hintUsed:new Set()};
+   match.players.set(playerId,player);
+   send(socket as Socket,{type:"joined",matchId:id,playerId,players:match.players.size,requiredPlayers:requiredPlayers(match.mode,match.targetPlayers),mode:match.mode,subject:match.subject,isHost:match.hostPlayerId===playerId});
+   publish(match);
+   if(match.players.size>=requiredPlayers(match.mode,match.targetPlayers))startMatch(match);
+   return;
+  }
+  handleMessage(player,raw);
+ });
+ socket.on("close",()=>{
+  if(!player)return;
+  const match=[...matches.values()].find(item=>item.players.has(player!.id));
+  if(!match)return;
+  match.players.delete(player.id);
+  if(match.hostPlayerId===player.id)match.hostPlayerId=match.players.keys().next().value??"";
+  if(match.players.size===0){if(match.calibrationTimer)clearTimeout(match.calibrationTimer);matches.delete(match.id);}
+  else publish(match);
+ });
+});
 async function bootstrap():Promise<void>{
  if(process.env.REDIS_URL){try{const redis=await import("redis");redisClient=redis.createClient({url:process.env.REDIS_URL});redisClient.on("error",(e:Error)=>console.error("redis",e.message));await redisClient.connect();console.log("Redis live-state snapshots enabled");}catch(e){console.error("Redis unavailable; live state remains in process memory",(e as Error).message);redisClient=null;}}
  if(process.env.DATABASE_URL){try{const pg=await import("pg");pgPool=new pg.Pool({connectionString:process.env.DATABASE_URL});await pgPool.query(readFileSync(resolve(ROOT,"db/schema.sql"),"utf8"));for(const q of questions)await storeQuestion(q);const stored=await pgPool.query("SELECT question FROM questions WHERE id LIKE 'ai-%'");const known=new Set(questions.map(q=>q.id));for(const row of stored.rows){const q=(row.question??null) as Question|null;if(q?.id&&!known.has(q.id)&&q.text&&q.answer){known.add(q.id);questions.push(q);}}console.log(`PostgreSQL enabled; ${questions.length} questions loaded`);if(process.env.OPENAI_API_KEY)startQuestionAgent();else console.log("Question agent is off; set OPENAI_API_KEY to enable it");}catch(e){console.error("PostgreSQL unavailable; answer logging disabled",(e as Error).message);if(pgPool)await pgPool.end().catch(()=>{});pgPool=null;}}
