@@ -46,8 +46,8 @@ let joystick = { x: 0, z: 0 }, joystickPointer = null, targetFixture = null;
 const voicePeers = new Map(), voiceAudio = new Map(), pendingIce = new Map();
 let voiceStream = null;
 let random = seeded(1);
-function send(type, data = {}) { if (ws?.readyState === WebSocket.OPEN)
-    ws.send(JSON.stringify({ type, ...data })); }
+function send(type, data = {}) { if (ws?.readyState !== WebSocket.OPEN)
+    return false; ws.send(JSON.stringify({ type, ...data })); return true; }
 function seeded(seed) { let s = seed >>> 0; return () => { s = (s + 0x6d2b79f5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 function hash(value) { let h = 2166136261; for (const c of value)
     h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; }
@@ -199,7 +199,7 @@ function applyRoomSize(roomSize) { const areaScale = THREE.MathUtils.clamp(roomS
     moveTarget.x = THREE.MathUtils.clamp(moveTarget.x, -5.35 * linearScale, 5.35 * linearScale);
     moveTarget.z = THREE.MathUtils.clamp(moveTarget.z, -3.35 * linearScale, 3.35 * linearScale);
 } roomStats.dataset.roomSize = String(Math.round(roomSize)); }
-function updateMovement(dt) { if (!latest || latest.phase !== "LIVE" || latest.player.crushed || latest.player.exited)
+function updateMovement(dt) { if (!latest || (latest.phase !== "LIVE" && latest.phase !== "LOBBY") || latest.player.crushed || latest.player.exited)
     return; let x = (keys.has("d") || keys.has("arrowright") ? 1 : 0) - (keys.has("a") || keys.has("arrowleft") ? 1 : 0) + joystick.x, z = (keys.has("s") || keys.has("arrowdown") ? 1 : 0) - (keys.has("w") || keys.has("arrowup") ? 1 : 0) + joystick.z; let length = Math.hypot(x, z); if (length <= .05 && moveTarget) {
     const dx = moveTarget.x - player.position.x, dz = moveTarget.z - player.position.z;
     length = Math.hypot(dx, dz);
@@ -296,7 +296,10 @@ function syncRemotePlayers(players) { const present = new Set(players.map(p => p
 function appendChat(name, text, mine = false, number, isHost = false) { const row = document.createElement("p"), who = document.createElement("strong"); row.className = mine ? "chat-line mine" : "chat-line"; who.textContent = `${number ? `${number}. ` : ""}${name}${isHost ? " (Host)" : ""}${mine ? " (you)" : ""}: `; row.append(who, document.createTextNode(text)); chatMessages.append(row); while (chatMessages.childElementCount > 100)
     chatMessages.firstElementChild?.remove(); chatMessages.scrollTop = chatMessages.scrollHeight; }
 chatForm.addEventListener("submit", event => { event.preventDefault(); const text = chatInput.value.trim(); if (!text)
-    return; send("chat", { text }); chatInput.value = ""; });
+    return; if (!send("chat", { text })) {
+    appendChat("System", "Message not sent: you are disconnected. Rejoin the room and try again.");
+    return;
+} chatInput.value = ""; });
 function closeVoicePeer(id) { const pc = voicePeers.get(id); if (pc) {
     pc.close();
     voicePeers.delete(id);
@@ -442,6 +445,13 @@ function handle(event) {
     }
     if (event.type === "chat_message") {
         appendChat(String(event.senderName ?? "Player"), String(event.text ?? ""), String(event.senderId ?? "") === playerId, Number(event.senderNumber) || undefined, event.senderIsHost === true);
+        return;
+    }
+    if (event.type === "chat_error") {
+        if (!chatInput.value)
+            chatInput.value = String(event.text ?? "");
+        appendChat("System", String(event.message ?? "Message could not be sent."));
+        chatInput.focus();
         return;
     }
     if (event.type === "players_update") {
@@ -600,11 +610,13 @@ worldCanvas.addEventListener("pointerdown", event => { pointerDown = { x: event.
 worldCanvas.addEventListener("pointerup", event => { if (!pointerDown || Math.hypot(event.clientX - pointerDown.x, event.clientY - pointerDown.y) > 8) {
     pointerDown = null;
     return;
-} pointerDown = null; if (!latest || latest.phase !== "LIVE")
+} pointerDown = null; if (!latest || (latest.phase !== "LIVE" && latest.phase !== "LOBBY"))
     return; const rect = worldCanvas.getBoundingClientRect(), mouse = new THREE.Vector2(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1), ray = new THREE.Raycaster(); ray.setFromCamera(mouse, camera); const hit = ray.intersectObjects(fixtures.map(f => f.root), true)[0], id = hit?.object.userData.exitId, fixture = fixtures.find(f => f.exit.id === id); if (fixture) {
     const dist = player.position.distanceTo(fixture.position.clone().multiply(roomGroup.scale));
-    if (dist < 2.7)
-        askExit(fixture);
+    if (dist < 2.7) {
+        if (latest.phase === "LIVE")
+            askExit(fixture);
+    }
     else {
         moveTarget = fixture.position.clone().multiplyScalar(.72);
         moveMarker.position.set(moveTarget.x, .02, moveTarget.z);

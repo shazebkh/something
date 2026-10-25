@@ -79,14 +79,16 @@ function startMatch(match:Match,startImmediately=false):void{
  setTimeout(()=>{if(match.phase!=="RESULTS")endMatch(match);},MATCH_MS);
 }
 function toggleStartCountdown(match:Match):void{
- if(match.startCountdownTimer){clearInterval(match.startCountdownTimer);match.startCountdownTimer=null;match.startCountdownEndsAt=null;broadcast(match,{type:"countdown_cancelled"});return;}
+ if(match.startCountdownTimer){clearInterval(match.startCountdownTimer);match.startCountdownTimer=null;match.startCountdownEndsAt=null;broadcast(match,{type:"countdown_cancelled"});publish(match);return;}
  let seconds=5;
+ match.startCountdownEndsAt=Date.now()+5000;
  broadcast(match,{type:"start_countdown",seconds});
  match.startCountdownTimer=setInterval(()=>{
   seconds--;
   if(seconds<=0){clearInterval(match.startCountdownTimer!);match.startCountdownTimer=null;match.startCountdownEndsAt=null;broadcast(match,{type:"start_countdown",seconds:0});startMatch(match,true);return;}
   broadcast(match,{type:"start_countdown",seconds});
  },1000);
+ publish(match);
 }function createMatch(id:string,mode:MatchMode,targetPlayers:number,subject:QuestionSubject,hostPlayerId:string):Match{const seed=Math.floor(Math.random()*2**32),match:Match={id,nextPlayerNumber:1,startCountdownTimer:null,startCountdownEndsAt:null,mode,targetPlayers,subject,hostPlayerId,phase:"LOBBY",seed,house:generateHouse({seed}),players:new Map(),startedAt:null,endedAt:null,calibrationTimer:null};matches.set(id,match);return match;}
 function normalize(value:string):string{return value.normalize("NFKC").trim().toLowerCase().replace(/\s+/g," ");}
 function handleMessage(p:Player,raw:string):void{
@@ -94,11 +96,11 @@ function handleMessage(p:Player,raw:string):void{
  const match=[...matches.values()].find(m=>m.players.has(p.id));if(!match){emitError(p,"Join a match first");return;}
  if(msg.type==="start_match"){if(match.phase!=="LOBBY"){emitError(p,"This game has already started");return;}if(match.hostPlayerId!==p.id){emitError(p,"Only the host can start the game");return;}toggleStartCountdown(match);return;}
  if(msg.type==="move") {
-  if(match.phase!=="LIVE"||p.state.crushed||p.state.exitedAt!==null)return;
+  if((match.phase!=="LIVE"&&match.phase!=="LOBBY")||p.state.crushed||p.state.exitedAt!==null)return;
   const now=Date.now();if(now-p.lastMoveAt<75)return;const x=Number(msg.x),z=Number(msg.z);if(!Number.isFinite(x)||!Number.isFinite(z))return;const elapsed=Math.max(0,Math.min(500,now-p.lastMoveAt))/1000;const maxStep=4*elapsed+.28,dx=x-p.position.x,dz=z-p.position.z;if(Math.hypot(dx,dz)>maxStep)return;const scale=Math.sqrt(Math.max(.25,Math.min(1,p.state.roomSize/100)));p.position={x:Math.max(-5.35*scale,Math.min(5.35*scale,x)),z:Math.max(-3.35*scale,Math.min(3.35*scale,z))};p.lastMoveAt=now;broadcastRoomPlayers(match,p.roomId);return;
  }
  if(msg.type==="chat") {
-  const now=Date.now();if(match.phase==="RESULTS"||now-p.lastChatAt<650)return;const text=String(msg.text??"").normalize("NFKC").replace(/[\u0000-\u001f\u007f]/g," ").trim().slice(0,280);if(!text)return;p.lastChatAt=now;broadcast(match,{type:"chat_message",senderId:p.id,senderName:p.name,senderNumber:p.playerNumber,senderIsHost:p.id===match.hostPlayerId,text,sentAt:now});return;
+  const now=Date.now();if(match.phase==="RESULTS")return;const text=String(msg.text??"").normalize("NFKC").replace(/[\u0000-\u001f\u007f]/g," ").trim().slice(0,280);if(!text)return;if(now-p.lastChatAt<350){send(p.socket,{type:"chat_error",message:"Please wait a moment before sending another message.",text});return;}p.lastChatAt=now;broadcast(match,{type:"chat_message",senderId:p.id,senderName:p.name,senderNumber:p.playerNumber,senderIsHost:p.id===match.hostPlayerId,text,sentAt:now});return;
  }
  if(msg.type==="voice_ready"){if(match.phase==="RESULTS")return;p.voiceReady=msg.ready===true;broadcastRoomPlayers(match,p.roomId);return;}
  if(msg.type==="voice_signal"){if(match.phase==="RESULTS"||!msg.targetId||!msg.signal)return;const target=match.players.get(msg.targetId);if(target&&target.roomId===p.roomId&&target.voiceReady&&p.voiceReady)send(target.socket,{type:"voice_signal",fromId:p.id,signal:msg.signal});return;}
