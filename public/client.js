@@ -189,6 +189,8 @@ function askExit(fixture) { if (!latest || latest.phase !== "LIVE" || latest.pla
     return; if (requestedExitId === fixture.exit.id)
     return; requestedExitId = fixture.exit.id; send("choose_exit", { exitId: fixture.exit.id }); feedback.textContent = `Checking ${fixture.exit.type}…`; hintText.textContent = ""; }
 function onExitNear(fixture) { targetFixture = fixture; if (!fixture) {
+    if (latest?.phase === "LIVE")
+        questionCard.hidden = true;
     nearby.textContent = latest?.phase === "LIVE" ? "Move close to a door, window, cupboard or drawer." : latest?.phase === "CALIBRATION" ? "Answer the shared calibration question." : "Waiting for players to join.";
     requestedExitId = null;
     return;
@@ -467,7 +469,7 @@ function handle(event) {
 let builtRoomId = "";
 let renderedQuestionKey = "";
 function renderQuestion(data) {
-    const active = !!data.question && !data.player.crushed && !data.player.exited;
+    const active = !!data.question && !data.player.crushed && !data.player.exited && (data.phase !== "LIVE" || !!targetFixture);
     questionCard.hidden = !active;
     const questionKey = `${data.phase}:${data.question ? JSON.stringify(data.question) : "none"}`;
     if (questionKey !== renderedQuestionKey) {
