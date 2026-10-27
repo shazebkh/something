@@ -7,6 +7,7 @@ const modeEl = required("#mode"), playerCountLabel = required("#player-count-lab
 const phaseEl = required("#phase"), roomStats = required("#room-stats"), nearby = required("#nearby");
 const questionEl = required("#question"), answerInput = required("#answer-input"), feedback = required("#feedback"), hintText = required("#hint-text"), questionCard = required("#question-card");
 const questionSource = required("#question-source"), roomClearToast = required("#room-clear-toast"), leaderboard = required("#leaderboard"), resultsScreen = required("#results-screen"), resultIcon = required("#result-icon"), resultTitle = required("#result-title"), resultPoints = required("#result-points"), worldCanvas = required("#world"), stickPad = required("#joystick"), stick = required("#stick"), socialPanel = required("#social-panel"), chatMessages = required("#chat-messages"), chatForm = required("#chat-form"), chatInput = required("#chat-input"), voiceEnable = required("#voice-enable"), talkButton = required("#push-to-talk"), voiceStatus = required("#voice-status");
+const answerToast = required("#answer-toast");
 const scene = new THREE.Scene();
 scene.background = new THREE.Color("#172026");
 scene.fog = new THREE.Fog("#172026", 17, 36);
@@ -41,7 +42,7 @@ moveMarker.rotation.x = -Math.PI / 2;
 moveMarker.position.y = .02;
 moveMarker.visible = false;
 scene.add(moveMarker);
-let ws = null, latest = null, playerId = null, matchId = null, requestedExitId = null, visualRevision = 0, pendingVisualRefresh = false, countdownActive = false;
+let ws = null, latest = null, playerId = null, matchId = null, requestedExitId = null, visualRevision = 0, pendingVisualRefresh = false, countdownActive = false, answerToastTimer = 0, exitRetryTimer = 0;
 let joystick = { x: 0, z: 0 }, joystickPointer = null, targetFixture = null;
 const voicePeers = new Map(), voiceAudio = new Map(), pendingIce = new Map();
 let voiceStream = null;
@@ -188,7 +189,13 @@ resize();
 function askExit(fixture) { if (!latest || latest.phase !== "LIVE" || latest.player.crushed || latest.player.exited)
     return; if (requestedExitId === fixture.exit.id)
     return; requestedExitId = fixture.exit.id; send("choose_exit", { exitId: fixture.exit.id }); feedback.textContent = `Checking ${fixture.exit.type}…`; hintText.textContent = ""; }
-function onExitNear(fixture) { targetFixture = fixture; if (!fixture) {
+function showAnswerToast(correct) { window.clearTimeout(answerToastTimer); answerToast.className = correct ? "answer-toast success" : "answer-toast incorrect"; answerToast.textContent = correct ? "Excellent work! Answer the next question to get closer to the finish line." : "Oops, you answered incorrectly. Try again."; answerToast.hidden = false; answerToastTimer = window.setTimeout(() => { answerToast.hidden = true; }, 1800); }
+function scheduleExitRetry(exitId, delayMs) { window.clearTimeout(exitRetryTimer); exitRetryTimer = window.setTimeout(() => { if (!latest || latest.phase !== "LIVE" || latest.player.crushed || latest.player.exited || targetFixture?.exit.id !== exitId)
+    return; requestedExitId = null; askExit(targetFixture); }, Math.max(0, delayMs)); }
+function onExitNear(fixture) { if (targetFixture?.exit.id !== fixture?.exit.id) {
+    window.clearTimeout(exitRetryTimer);
+    exitRetryTimer = 0;
+} targetFixture = fixture; if (!fixture) {
     if (latest?.phase === "LIVE")
         questionCard.hidden = true;
     nearby.textContent = latest?.phase === "LIVE" ? "Move close to a door, window, cupboard or drawer." : latest?.phase === "CALIBRATION" ? "Answer the shared calibration question." : "Waiting for players to join.";
@@ -434,6 +441,16 @@ function handle(event) {
     }
     if (event.type === "error") {
         loadingScreen.hidden = true;
+        const retryAfterMs = Number(event.retryAfterMs);
+        if (event.message === "Exit is locked out") {
+            const retryExitId = String(event.exitId ?? targetFixture?.exit.id ?? "");
+            if (retryExitId) {
+                requestedExitId = null;
+                scheduleExitRetry(retryExitId, Math.max(25, retryAfterMs));
+            }
+            nearby.textContent = "Exit locked. You can try that object again shortly.";
+            return;
+        }
         statusEl.textContent = String(event.message);
         feedback.textContent = String(event.message);
         if (game.hidden) {
@@ -525,12 +542,13 @@ function handle(event) {
         return;
     }
     if (event.type === "answer_result") {
+        showAnswerToast(event.correct === true);
+        feedback.textContent = "";
         if (event.correct) {
-            feedback.textContent = `Correct · +${Math.round(event.points)} points · the room changes around you.`;
             pendingVisualRefresh = true;
         }
-        else
-            feedback.textContent = "Incorrect · switch to another object or try this one again after its lockout.";
+        else if (Number(event.lockoutMs) > 0 && targetFixture)
+            scheduleExitRetry(targetFixture.exit.id, Number(event.lockoutMs));
         return;
     }
     if (event.type === "crushed" && event.playerId === playerId)

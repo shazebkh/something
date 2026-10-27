@@ -107,7 +107,7 @@ function handleMessage(p:Player,raw:string):void{
  if(msg.type==="choose_exit"){
   if(match.phase!=="LIVE"){emitError(p,"Exits are available during the live phase");return;}
   const exit=currentExits(match,p).find(e=>e.id===msg.exitId);if(!exit){emitError(p,"That exit is not in your room");return;}
-  try{p.state=beginQuestion(selectExit(p.state,exit.id),"pending",Date.now());}catch(e){emitError(p,(e as Error).message);return;}
+  try{p.state=beginQuestion(selectExit(p.state,exit.id),"pending",Date.now());}catch(e){const message=(e as Error).message;if(message==="Exit is locked out"){send(p.socket,{type:"error",message,retryAfterMs:Math.max(0,p.state.lockoutUntil-Date.now()),exitId:exit.id});}else emitError(p,message);return;}
   issueQuestion(match,p);send(p.socket,roomUpdate(match,p));return;
  }
  if(msg.type==="request_hint"){
@@ -123,7 +123,7 @@ function handleMessage(p:Player,raw:string):void{
    if(match.phase==="CALIBRATION"){p.calibrationIndex++;issueQuestion(match,p);send(p.socket,{type:"answer_result",correct,points:applied.pointsEarned});send(p.socket,roomUpdate(match,p));return;}
    if(correct){for(const other of match.players.values())if(other.id!==p.id)send(other.socket,{type:"room_cleared",playerName:p.name});const exit=currentExits(match,p).find(e=>e.id===p.state.selectedExitId);if(exit?.type==="door"){if(exit.targetRoomId===null){p.state=markExited(p.state,Date.now());p.roomId=match.house.exitRoomId;p.position={x:0,z:0};publish(match);endMatch(match);return;}p.roomId=exit.targetRoomId;p.position={x:0,z:0};}else if(exit){const dest=chooseTeleportDestination(match.house,p.farStreak>=2,Math.floor(Math.random()*2**32));p.farStreak=dest.region==="far"?p.farStreak+1:0;p.roomId=dest.roomId;p.position={x:0,z:0};send(p.socket,{type:"teleport",roomId:dest.roomId,region:dest.region});}
     send(p.socket,{type:"answer_result",correct:true,points:applied.pointsEarned});
-   }else send(p.socket,{type:"answer_result",correct:false,points:0});
+   }else send(p.socket,{type:"answer_result",correct:false,points:0,lockoutMs:applied.lockoutMs});
    if(p.state.crushed)broadcast(match,{type:"crushed",playerId:p.id});publish(match);if([...match.players.values()].some(x=>x.state.exitedAt!==null)){endMatch(match);return;}
   }catch(e){emitError(p,(e as Error).message);}return;
  }
